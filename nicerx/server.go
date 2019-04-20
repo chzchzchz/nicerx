@@ -20,9 +20,6 @@ type Server struct {
 }
 
 func NewServer(sdr *radio.SDR) (*Server, error) {
-	if err := sdr.SetAGCMode(true); err != nil {
-		return nil, err
-	}
 	ss, err := store.NewSignalStore("bands")
 	if err != nil {
 		return nil, err

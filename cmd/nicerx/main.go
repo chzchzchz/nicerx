@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"encoding/binary"
 
 	"github.com/spf13/cobra"
 
@@ -22,11 +23,13 @@ var rootCmd = &cobra.Command{
 var (
 	centerHz    uint64
 	sampleHz    uint32
+	deviationHz uint
 	downmixHz   int
 	cutoffHz    uint
 	bandwidthHz uint
 	powerFFTs   int
 	imageWidth  int
+	pcmHz uint
 )
 
 func init() {
@@ -78,6 +81,48 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) { importCSV(args[0]) },
 	}
 	rootCmd.AddCommand(importCmd)
+
+	demodCommand := &cobra.Command{
+		Use: "fmdemod iqfile pcmfile",
+		Short: "FM demodulate an iq8 file to PCM",
+		Run: func(cmd *cobra.Command, args []string) { demod(args[0], args[1]) },
+	}
+	demodCommand.Flags().Uint32VarP(&sampleHz, "sample-rate", "s", 0, "Sample rate in Hz")
+	demodCommand.Flags().UintVarP(&deviationHz, "deviation", "d", 0, "Maximum signal deviation in Hz")
+	demodCommand.Flags().UintVarP(&pcmHz, "pcm-rate", "p", 0, "PCM sampling rate in Hz")
+	rootCmd.AddCommand(demodCommand)
+
+}
+
+func demod(inf, outf string) {
+	if sampleHz == 0 || deviationHz == 0 || pcmHz == 0 {
+		panic("need sample-rate and deviation")
+	}
+	f, err := os.Open(inf)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	fout, err := os.OpenFile(outf, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer fout.Close()
+
+	h := float64(deviationHz) / float64(sampleHz)
+	iqr := radio.NewIQReader(f)
+	demodc := dsp.DemodFM(float32(h), iqr.Batch64(512, 0))
+	r := float64(pcmHz) /float64(sampleHz)
+	resampc := dsp.Resample(float32(r), demodc)
+	for rsamps := range resampc {
+		outsamps := make([]int16, len(rsamps))
+		for i, v := range rsamps {
+			outsamps[i] = int16(v*65536)
+		}
+		if err := binary.Write(fout, binary.LittleEndian, outsamps); err != nil {
+			panic(err)
+		}
+	}
 }
 
 func importCSV(inf string) {
@@ -114,8 +159,6 @@ func capture() {
 		panic(err)
 	}
 	defer sdr.Close()
-	sdr.SetAGCMode(true)
-	sdr.Calibrate()
 	fb := radio.FreqBand{Center: float64(centerHz) / 1e6, Width: float64(bandwidthHz) / 1e6}
 	ss, err := store.NewSignalStore("bands")
 	if err != nil {
@@ -142,7 +185,6 @@ func serve() {
 		panic(err)
 	}
 	go func() { s.Serve(ctx) }()
-	fmt.Printf("sdr info: %+v\n", sdr.Info)
 	fmt.Println("serving http on :8080...")
 	if err := http.ServeHttp(s, ":8080"); err != nil {
 		fmt.Println(err)

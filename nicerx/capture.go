@@ -21,7 +21,7 @@ const windowSize = 20
 const sdrRate = 1024000
 const offsetHz = 2 * 10240
 const windowSamples = 8192
-const maxWindowWrite = 25
+const maxWindowWrite = 40
 
 func NewCapture(sdr *radio.SDR,
 	band radio.FreqBand,
@@ -41,7 +41,7 @@ func (c *Capture) Step(ctx context.Context) error {
 	}
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	sampc := radio.NewIQReader(c.sdr).BatchStream64(cctx, windowSamples, 0)
+	sampc := radio.NewIQReader(c.sdr.SDR).BatchStream64(cctx, windowSamples, 0)
 	sp := radio.NewSpectralPower(fb, windowSamples, windowSize)
 	var iqw *radio.IQWriter
 	var f *os.File

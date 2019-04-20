@@ -10,9 +10,9 @@ static void firfilt_crcf_block(
 {
 	// remove DC bias by subtracting mean
 	complex double mean = 0.0;
-	for (unsigned i = 0; i < n; i++)
-	 	mean += in[i];
-	mean /= (double)n;
+	// for (unsigned i = 0; i < n; i++)
+	// 	mean += in[i];
+	// mean /= (double)n;
 
 	unsigned j = 0, k = 0;
 	for (unsigned i = 0; i < n; i++) {
@@ -33,7 +33,7 @@ import (
 	"unsafe"
 )
 
-func MixDown(mixHz float64, sampHz int, sig <-chan []complex64) <-chan []complex64 {
+func MixDown(mixHz float64, sampHz int, sigc <-chan []complex64) <-chan []complex64 {
 	q := C.nco_crcf_create(C.LIQUID_NCO)
 	C.nco_crcf_set_phase(q, C.float(0))
 	outc := make(chan []complex64, 1)
@@ -44,7 +44,7 @@ func MixDown(mixHz float64, sampHz int, sig <-chan []complex64) <-chan []complex
 		}()
 		radiansPerSample := mixHz * (2.0 * math.Pi / float64(sampHz))
 		C.nco_crcf_set_frequency(q, C.float(radiansPerSample))
-		for samp := range sig {
+		for samp := range sigc {
 			outsamp := make([]complex64, len(samp))
 			C.nco_crcf_mix_block_down(
 				q,
@@ -60,7 +60,7 @@ func MixDown(mixHz float64, sampHz int, sig <-chan []complex64) <-chan []complex
 func Lowpass(cutoffHz float64,
 	sampHz int,
 	decRate int,
-	sig <-chan []complex64) <-chan []complex64 {
+	sigc <-chan []complex64) <-chan []complex64 {
 	As := 70.0
 	cutoffFreq := cutoffHz / float64(sampHz)
 
@@ -80,13 +80,59 @@ func Lowpass(cutoffHz float64,
 			C.firfilt_crcf_destroy(q)
 			close(outc)
 		}()
-		for samp := range sig {
+		for samp := range sigc {
 			outsamp := make([]complex64, len(samp)/decRate)
 			C.firfilt_crcf_block(q,
 				(*C.complexfloat)(unsafe.Pointer(&samp[0])),
 				(*C.complexfloat)(unsafe.Pointer(&outsamp[0])),
 				C.uint(len(samp)),
 				C.uint(decRate))
+			outc <- outsamp
+		}
+	}()
+	return outc
+}
+
+func Resample(r float32, sigc <-chan []float32) (<-chan []float32) {
+	outc := make(chan []float32, 1)
+	q := C.resamp_rrrf_create_default(C.float(r))
+	go func() {
+		defer func() {
+			close(outc)
+			C.resamp_rrrf_destroy(q)
+		}()
+		for samps := range sigc {
+			outsamp := make([]float32, int(math.Ceil(float64(r) * float64(len(samps)))))
+			var outlen uint
+			C.resamp_rrrf_execute_block(q,
+				(*C.float)(unsafe.Pointer(&samps[0])),
+				C.uint(len(samps)),
+				(*C.float)(unsafe.Pointer(&outsamp[0])),
+				(*C.uint)(unsafe.Pointer(&outlen)))
+			outsamp = outsamp[:outlen]
+			outc <- outsamp
+
+		}
+	}()
+	return outc
+}
+
+func DemodFM(h float32, sigc <-chan []complex64) (<-chan []float32) {
+	// h = modulation index = (delta f)/(delta modulation)
+	outc := make(chan []float32, 1)
+	q := C.freqdem_create(C.float(h))
+	go func() {
+		defer func() {
+			close(outc)
+			C.freqdem_destroy(q)
+		}()
+		for samps := range sigc {
+			outsamp := make([]float32, len(samps))
+			C.freqdem_demodulate_block(
+				q,
+				(*C.complexfloat)(unsafe.Pointer(&samps[0])),
+				C.uint(len(samps)),
+				(*C.float)(unsafe.Pointer(&outsamp[0])))
 			outc <- outsamp
 		}
 	}()

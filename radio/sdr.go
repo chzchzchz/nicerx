@@ -13,8 +13,8 @@ import (
 	"github.com/kr/pty"
 )
 
-var minFreqHz = 25000000
-var maxFreqHz = 1750000000
+var minFreqHz = uint32(25000000)
+var maxFreqHz = uint32(1750000000)
 
 
 type SDR struct {
@@ -44,9 +44,17 @@ func (s *SDR) Stop() error {
 
 func (s *SDR) SetBand(b FreqBand) error {
 	if s.SDR == nil {
-		s.resetConn()
+		if err := s.resetConn(); err != nil {
+			return err
+		}
 	}
 	if s.lastPPM == 0 || time.Since(s.lastCalibrateTime) > 5*time.Minute {
+		fmt.Println("CALIBRATING!!")
+		if s.lastCalibrateTime.IsZero() {
+			if err := s.SDR.SetAGCMode(true); err != nil {
+				return err
+			}
+		}
 		if err := s.Calibrate(); err != nil {
 			return err
 		}
@@ -150,11 +158,7 @@ func NewSDR(ctx context.Context) (*SDR, error) {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	sdr, err := connect(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return &SDR{SDR: sdr, fpty: fpty, cmd: cmd}, nil
+	return &SDR{fpty: fpty, cmd: cmd}, nil
 }
 
 func connect(ctx context.Context) (*rtltcp.SDR, error) {
@@ -180,9 +184,7 @@ func connect(ctx context.Context) (*rtltcp.SDR, error) {
 }
 
 func (s *SDR) Close() error {
-	if err := s.SDR.Close(); err != nil {
-		return err
-	}
+	s.Stop()
 	s.fpty.Close()
 	return s.cmd.Wait()
 }

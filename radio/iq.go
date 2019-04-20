@@ -11,7 +11,12 @@ type IQReader struct {
 }
 
 // NewIQReader takes a reader that uses u8 I/Q samples.
-func NewIQReader(r io.Reader) *IQReader { return &IQReader{r: r} }
+func NewIQReader(r io.Reader) *IQReader {
+	if r == nil {
+		panic("nil reader")
+	}
+	return &IQReader{r: r}
+}
 
 func (iq *IQReader) Batch64(batch, limit int) <-chan []complex64 {
 	return iq.BatchStream64(context.Background(), batch, limit)
