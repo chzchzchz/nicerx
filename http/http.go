@@ -4,9 +4,9 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
-	"path"
 
 	"github.com/chzchzchz/nicerx/nicerx"
 	"github.com/chzchzchz/nicerx/radio"

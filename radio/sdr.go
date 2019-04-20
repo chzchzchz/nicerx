@@ -16,15 +16,14 @@ import (
 var minFreqHz = uint32(25000000)
 var maxFreqHz = uint32(1750000000)
 
-
 type SDR struct {
 	*rtltcp.SDR
 	cmd  *exec.Cmd
 	fpty *os.File
 
-	lastCenter     uint32
-	lastSampleRate uint32
-	lastPPM        uint32
+	lastCenter        uint32
+	lastSampleRate    uint32
+	lastPPM           uint32
 	lastCalibrateTime time.Time
 }
 
@@ -59,7 +58,7 @@ func (s *SDR) SetBand(b FreqBand) error {
 			return err
 		}
 	}
-	newFreq, newRate := uint32(b.Center * 1e6), uint32(b.Width * 1e6)
+	newFreq, newRate := uint32(b.Center*1e6), uint32(b.Width*1e6)
 	if newFreq == s.lastCenter && newRate == s.lastSampleRate {
 		return nil
 	}

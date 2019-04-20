@@ -93,7 +93,7 @@ func Lowpass(cutoffHz float64,
 	return outc
 }
 
-func Resample(r float32, sigc <-chan []float32) (<-chan []float32) {
+func Resample(r float32, sigc <-chan []float32) <-chan []float32 {
 	outc := make(chan []float32, 1)
 	q := C.resamp_rrrf_create_default(C.float(r))
 	go func() {
@@ -102,7 +102,7 @@ func Resample(r float32, sigc <-chan []float32) (<-chan []float32) {
 			C.resamp_rrrf_destroy(q)
 		}()
 		for samps := range sigc {
-			outsamp := make([]float32, int(math.Ceil(float64(r) * float64(len(samps)))))
+			outsamp := make([]float32, int(math.Ceil(float64(r)*float64(len(samps)))))
 			var outlen uint
 			C.resamp_rrrf_execute_block(q,
 				(*C.float)(unsafe.Pointer(&samps[0])),
@@ -117,7 +117,7 @@ func Resample(r float32, sigc <-chan []float32) (<-chan []float32) {
 	return outc
 }
 
-func DemodFM(h float32, sigc <-chan []complex64) (<-chan []float32) {
+func DemodFM(h float32, sigc <-chan []complex64) <-chan []float32 {
 	// h = modulation index = (delta f)/(delta modulation)
 	outc := make(chan []float32, 1)
 	q := C.freqdem_create(C.float(h))

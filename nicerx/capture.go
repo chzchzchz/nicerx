@@ -34,8 +34,8 @@ func (c *Capture) Band() radio.FreqBand { return c.band }
 func (c *Capture) Step(ctx context.Context) error {
 	centerHz := uint32(c.band.Center*1e6) - offsetHz
 	fb := radio.FreqBand{
-		Center: float64(centerHz)/1e6,
-		Width: float64(sdrRate) / 1e6}
+		Center: float64(centerHz) / 1e6,
+		Width:  float64(sdrRate) / 1e6}
 	if err := c.sdr.SetBand(fb); err != nil {
 		return err
 	}
