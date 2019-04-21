@@ -12,6 +12,31 @@ import (
 	"github.com/runningwild/go-fftw/fftw32"
 )
 
+// black, green, yellow, white
+var colorScale = []color.NRGBA{
+	{0, 0, 0, 255},
+	{0, 255, 0, 255},
+	{255, 255, 0, 255},
+	{255, 255, 255, 255},
+}
+
+func interpolate(t float64, a, b uint8) uint8 { return uint8(float64(a)*(1-t) + float64(b)*t) }
+
+func fftBin2Color(v float64) color.NRGBA {
+	idx := float64(len(colorScale)-1) * v
+	if int(idx)+1 >= len(colorScale) {
+		panic("bad idx")
+	}
+	t := idx - float64(int(idx))
+	prev, next := colorScale[int(idx)], colorScale[int(idx)+1]
+	return color.NRGBA{
+		interpolate(t, prev.R, next.R),
+		interpolate(t, prev.G, next.G),
+		interpolate(t, prev.B, next.B),
+		255,
+	}
+}
+
 func WriteSpectrogramFile(infn, outfn string, bins int) error {
 	inf, err := os.Open(infn)
 	if err != nil {
@@ -45,14 +70,15 @@ func WriteSpectrogramFile(infn, outfn string, bins int) error {
 				max = v
 			}
 		}
-		scale := 255.0 / (max - min)
+		// scale to [0, 1)
+		scale := 1.0 / ((max - min) + 0.001)
 		// Order so lowest and highest frequencies are at the beginning
 		// and end, respectively.
 		fftOrdered := append(fft[bins/2:], fft[:bins/2]...)
-		c := color.NRGBA{R: 0, G: 0, B: 0, A: 255}
 		for x, v := range fftOrdered {
-			c.G = uint8((v - min) * scale)
-			img.SetNRGBA(x, y, c)
+			val := scale * (v - min)
+			val = val * val
+			img.SetNRGBA(x, y, fftBin2Color(val))
 		}
 		y++
 	}

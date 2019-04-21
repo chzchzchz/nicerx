@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"log"
-	"os"
 
 	"github.com/chzchzchz/nicerx/dsp"
 	"github.com/chzchzchz/nicerx/radio"
@@ -39,24 +38,13 @@ func (c *Capture) Step(ctx context.Context) error {
 	if err := c.sdr.SetBand(fb); err != nil {
 		return err
 	}
+
+	// Read windows from SDR and compute FFT.
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	sampc := radio.NewIQReader(c.sdr.SDR).BatchStream64(cctx, windowSamples, 0)
 	sp := radio.NewSpectralPower(fb, windowSamples, windowSize)
-	var iqw *radio.IQWriter
-	var f *os.File
-	var samps, lastSamps [][]complex64
-	writtenWindows := 0
-	finishStream := func() error {
-		if samps != nil {
-			writeWindow(iqw, samps)
-		}
-		writtenWindows = 0
-		fn := f.Name()
-		f.Close()
-		return c.processTmpCapture(fn)
-	}
-	for ctx.Err() == nil {
+	readWindow := func() (samps [][]complex64) {
 		windowc, donec := make(chan []complex64, windowSize), make(chan struct{})
 		go func() {
 			defer close(donec)
@@ -71,51 +59,51 @@ func (c *Capture) Step(ctx context.Context) error {
 		}
 		close(windowc)
 		<-donec
+		return samps
+	}
+
+	// Push signal samples to processCapture.
+	var outc chan []complex64
+	var lastSamps [][]complex64
+	writtenWindows := -1
+	mercy := 1
+	writeWindow := func(oc chan []complex64, samps [][]complex64) {
+		for _, samp := range samps {
+			oc <- samp
+		}
+		writtenWindows++
+	}
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		samps := readWindow()
 		gain, sdev := sp.BandPower(c.band, sdrRate), sp.Stddev()
 		if gain > sdev && writtenWindows < maxWindowWrite {
-			log.Printf("mhz: %.3f; gain: %.3f; sdev: %.3f; #%d\n", c.band.Center, gain, sdev, writtenWindows)
-			if iqw == nil {
-				ff, err := c.ss.OpenFile(c.sdr.Band())
-				if err != nil {
-					return err
-				}
-				f = ff
-				iqw = radio.NewIQWriter(f)
-				writeWindow(iqw, lastSamps)
+			if outc == nil {
+				outc = make(chan []complex64, windowSize)
+				defer close(outc)
+				go c.processCapture(outc)
+				writeWindow(outc, lastSamps)
 			}
-			writeWindow(iqw, samps)
-			writtenWindows++
-		} else if iqw != nil {
-			return finishStream()
-		}
-		lastSamps, samps = samps, nil
-	}
-	if f != nil {
-		finishStream()
-	}
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	return io.EOF
-}
-
-func writeWindow(iqw *radio.IQWriter, samps [][]complex64) error {
-	for _, v := range samps {
-		if err := iqw.Write64(v); err != nil {
-			return err
+			mercy = 1
+			writeWindow(outc, samps)
+			log.Printf("mhz: %.3f; gain: %.3f; sdev: %.3f; #%d\n", c.band.Center, gain, sdev, writtenWindows)
+		} else if outc != nil {
+			writeWindow(outc, samps)
+			if mercy > 0 {
+				mercy--
+				continue
+			}
+			return io.EOF
+		} else {
+			lastSamps = samps
 		}
 	}
-	return nil
 }
 
-func (c *Capture) processTmpCapture(fn string) error {
-	f, err := os.Open(fn)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	iqr := radio.NewIQReader(f)
-	mdc := dsp.MixDown(offsetHz, sdrRate, iqr.Batch64(windowSamples, 0))
+func (c *Capture) processCapture(sampc <-chan []complex64) error {
+	mdc := dsp.MixDown(offsetHz, sdrRate, sampc)
 	decRate := 1
 	outHz := sdrRate
 	sigHz := int(2 * c.band.Width * 1e6)

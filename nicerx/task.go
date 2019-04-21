@@ -92,6 +92,7 @@ func (tq *TaskQueue) Run(ctx context.Context) error {
 		err := t.Step(ctx)
 		if err == io.EOF {
 			tq.Stop(t.Id)
+			err = nil
 		}
 		t.mu.Lock()
 		t.stopTime = time.Now()

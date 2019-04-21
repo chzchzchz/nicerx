@@ -14,6 +14,7 @@ import (
 	"github.com/chzchzchz/nicerx/nicerx"
 	"github.com/chzchzchz/nicerx/radio"
 	"github.com/chzchzchz/nicerx/store"
+	"github.com/chzchzchz/nicerx/decoder"
 )
 
 var rootCmd = &cobra.Command{
@@ -92,6 +93,29 @@ func init() {
 	demodCommand.Flags().UintVarP(&pcmHz, "pcm-rate", "p", 0, "PCM sampling rate in Hz")
 	rootCmd.AddCommand(demodCommand)
 
+	decodeCommand := &cobra.Command{
+		Use: "decode iqfile",
+		Short: "Decode iq8 file with multimon-ng",
+		Run: func(cmd *cobra.Command, args []string) { decode(args[0]) },
+	}
+	decodeCommand.Flags().Uint32VarP(&sampleHz, "sample-rate", "s", 0, "Sample rate in Hz")
+	rootCmd.AddCommand(decodeCommand)
+}
+
+func decode(inf string) {
+	if sampleHz == 0 {
+		panic("need sample-rate")
+	}
+	f, err := os.Open(inf)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	s, err := decoder.FlexDecode(float32(sampleHz), radio.NewIQReader(f).Batch64(512, 0))
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(s)
 }
 
 func demod(inf, outf string) {
