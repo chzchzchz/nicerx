@@ -126,7 +126,7 @@ func (s *SDR) Calibrate() error {
 		if ppm < 1.0 {
 			break
 		}
-		if err := s.SetFreqCorrection(uint32(ppm + 0.5)); err != nil {
+		if err := s.SetFreqCorrection(uint32(ppm)); err != nil {
 			return err
 		}
 		ppm, err = FindPPM(s)

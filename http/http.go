@@ -152,7 +152,7 @@ func ServeHttp(s *nicerx.Server, serv string) error {
 
 type freqInfo struct {
 	Band         radio.FreqBand
-	Spectrograms []store.SpectrogramFile
+	Spectrograms []store.SignalFile
 }
 
 func (h *httpHandler) handleBand(w http.ResponseWriter, mhzStr string) {

@@ -41,13 +41,12 @@ func (ss *SignalStore) HasBand(fb radio.FreqBand) bool {
 	return err == nil
 }
 
-type SpectrogramFile struct {
-	Band radio.FreqBand
-	Date time.Time
+type SignalDir struct {
+	CenterMHz float64
 	Path string
 }
 
-func (ss *SignalStore) Spectrograms(fb radio.FreqBand) (ret []SpectrogramFile) {
+func (ss *SignalStore) overlapDirs(fb radio.FreqBand) (ret []SignalDir) {
 	// TODO: cache
 	files, err := ioutil.ReadDir(ss.baseDir)
 	if err != nil {
@@ -61,32 +60,62 @@ func (ss *SignalStore) Spectrograms(fb radio.FreqBand) (ret []SpectrogramFile) {
 		if !fb.Overlaps(radio.FreqBand{Center: mhz, Width: 100.0 / 1e6}) {
 			continue
 		}
-		fdir := filepath.Join(ss.baseDir, file.Name())
-		ffiles, err := ioutil.ReadDir(fdir)
+		sd := SignalDir{CenterMHz: mhz, Path: filepath.Join(ss.baseDir, file.Name())}
+		ret = append(ret, sd)
+	}
+	return ret
+}
+
+func (ss *SignalStore) findSignalSuffix(fb radio.FreqBand, suff string) (ret []SignalFile) {
+	for _, od := range ss.overlapDirs(fb) {
+		ffiles, err := ioutil.ReadDir(od.Path)
 		if err != nil {
 			continue
 		}
 		for _, ffile := range ffiles {
-			if !strings.HasSuffix(ffile.Name(), ".jpg") {
+			if !strings.HasSuffix(ffile.Name(), suff) {
 				continue
 			}
-			spl := strings.Split(ffile.Name(), ".")
-			ntime, bwhz := spl[0], spl[1]
-			ntime64, err := strconv.ParseInt(ntime, 10, 64)
-			if err != nil {
+			t, bwhz := pathTimeHz(ffile.Name())
+			if bwhz == 0 {
 				continue
 			}
-			bwhz64, err := strconv.ParseUint(bwhz, 10, 64)
-			if err != nil {
-				continue
-			}
-			sf := SpectrogramFile{
-				Band: radio.FreqBand{Center: mhz, Width: float64(bwhz64) / 1e6},
-				Date: time.Unix(0, ntime64),
-				Path: filepath.Join(fdir, ffile.Name()),
+			sf := SignalFile{
+				Band: radio.FreqBand{Center: od.CenterMHz, Width: float64(bwhz) / 1e6},
+				Date: t,
+				Path: filepath.Join(od.Path, ffile.Name()),
 			}
 			ret = append(ret, sf)
 		}
 	}
 	return ret
+
+}
+
+type SignalFile struct {
+	Band radio.FreqBand
+	Date time.Time
+	Path string
+}
+
+func (ss *SignalStore) Signals(fb radio.FreqBand) (ret []SignalFile) {
+	return ss.findSignalSuffix(fb, ".iq")
+}
+
+func (ss *SignalStore) Spectrograms(fb radio.FreqBand) (ret []SignalFile) {
+	return ss.findSignalSuffix(fb, ".jpg")
+}
+
+func pathTimeHz(p string) (t time.Time, _ uint) {
+	spl := strings.Split(p, ".")
+	ntime, bwhz := spl[0], spl[1]
+	ntime64, err := strconv.ParseInt(ntime, 10, 64)
+	if err != nil {
+		return t, 0
+	}
+	bwhz64, err := strconv.ParseUint(bwhz, 10, 64)
+	if err != nil {
+		return t, 0
+	}
+	return time.Unix(0, ntime64), uint(bwhz64)
 }
