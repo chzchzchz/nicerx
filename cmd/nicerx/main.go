@@ -2,19 +2,19 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
-	"encoding/binary"
 
 	"github.com/spf13/cobra"
 
+	"github.com/chzchzchz/nicerx/decoder"
 	"github.com/chzchzchz/nicerx/dsp"
-	"github.com/chzchzchz/nicerx/http"
 	"github.com/chzchzchz/nicerx/nicerx"
+	"github.com/chzchzchz/nicerx/nicerx/http"
 	"github.com/chzchzchz/nicerx/radio"
 	"github.com/chzchzchz/nicerx/store"
-	"github.com/chzchzchz/nicerx/decoder"
 )
 
 var rootCmd = &cobra.Command{
@@ -30,7 +30,7 @@ var (
 	bandwidthHz uint
 	powerFFTs   int
 	imageWidth  int
-	pcmHz uint
+	pcmHz       uint
 )
 
 func init() {
@@ -77,16 +77,16 @@ func init() {
 	rootCmd.AddCommand(spectrogramCmd)
 
 	importCmd := &cobra.Command{
-		Use: "import csvfile",
+		Use:   "import csvfile",
 		Short: "Import gqrx csv file into bands.db",
-		Run: func(cmd *cobra.Command, args []string) { importCSV(args[0]) },
+		Run:   func(cmd *cobra.Command, args []string) { importCSV(args[0]) },
 	}
 	rootCmd.AddCommand(importCmd)
 
 	demodCommand := &cobra.Command{
-		Use: "fmdemod iqfile pcmfile",
+		Use:   "fmdemod iqfile pcmfile",
 		Short: "FM demodulate an iq8 file to PCM",
-		Run: func(cmd *cobra.Command, args []string) { demod(args[0], args[1]) },
+		Run:   func(cmd *cobra.Command, args []string) { demod(args[0], args[1]) },
 	}
 	demodCommand.Flags().Uint32VarP(&sampleHz, "sample-rate", "s", 0, "Sample rate in Hz")
 	demodCommand.Flags().UintVarP(&deviationHz, "deviation", "d", 0, "Maximum signal deviation in Hz")
@@ -94,9 +94,9 @@ func init() {
 	rootCmd.AddCommand(demodCommand)
 
 	decodeCommand := &cobra.Command{
-		Use: "decode iqfile",
+		Use:   "decode iqfile",
 		Short: "Decode iq8 file with multimon-ng",
-		Run: func(cmd *cobra.Command, args []string) { decode(args[0]) },
+		Run:   func(cmd *cobra.Command, args []string) { decode(args[0]) },
 	}
 	decodeCommand.Flags().Uint32VarP(&sampleHz, "sample-rate", "s", 0, "Sample rate in Hz")
 	rootCmd.AddCommand(decodeCommand)
@@ -136,12 +136,12 @@ func demod(inf, outf string) {
 	h := float64(deviationHz) / float64(sampleHz)
 	iqr := radio.NewIQReader(f)
 	demodc := dsp.DemodFM(float32(h), iqr.Batch64(512, 0))
-	r := float64(pcmHz) /float64(sampleHz)
+	r := float64(pcmHz) / float64(sampleHz)
 	resampc := dsp.Resample(float32(r), demodc)
 	for rsamps := range resampc {
 		outsamps := make([]int16, len(rsamps))
 		for i, v := range rsamps {
-			outsamps[i] = int16(v*65536)
+			outsamps[i] = int16(v * 65536)
 		}
 		if err := binary.Write(fout, binary.LittleEndian, outsamps); err != nil {
 			panic(err)

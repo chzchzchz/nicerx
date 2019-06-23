@@ -11,7 +11,7 @@ import (
 )
 
 type Capture struct {
-	sdr  *radio.SDR
+	sdr  radio.SDR
 	band radio.FreqBand
 	ss   *store.SignalStore
 }
@@ -22,7 +22,7 @@ const offsetHz = 2 * 10240
 const windowSamples = 8192
 const maxWindowWrite = 40
 
-func NewCapture(sdr *radio.SDR,
+func NewCapture(sdr radio.SDR,
 	band radio.FreqBand,
 	ss *store.SignalStore) *Capture {
 	return &Capture{sdr, band, ss}
@@ -31,18 +31,18 @@ func NewCapture(sdr *radio.SDR,
 func (c *Capture) Band() radio.FreqBand { return c.band }
 
 func (c *Capture) Step(ctx context.Context) error {
-	centerHz := uint32(c.band.Center*1e6) - offsetHz
-	fb := radio.FreqBand{
-		Center: float64(centerHz) / 1e6,
-		Width:  float64(sdrRate) / 1e6}
-	if err := c.sdr.SetBand(fb); err != nil {
+	hzb := radio.HzBand{Center: c.band.Center*1e6 - offsetHz, Width: float64(sdrRate)}
+	if err := c.sdr.SetBand(hzb); err != nil {
 		return err
 	}
 
 	// Read windows from SDR and compute FFT.
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	sampc := radio.NewIQReader(c.sdr.SDR).BatchStream64(cctx, windowSamples, 0)
+	sampc := c.sdr.Reader().BatchStream64(cctx, windowSamples, 0)
+	fb := radio.FreqBand{
+		Center: hzb.Center / 1e6,
+		Width:  float64(sdrRate) / 1e6}
 	sp := radio.NewSpectralPower(fb, windowSamples, windowSize)
 	readWindow := func() (samps [][]complex64) {
 		windowc, donec := make(chan []complex64, windowSize), make(chan struct{})

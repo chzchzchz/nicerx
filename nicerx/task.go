@@ -165,3 +165,44 @@ func (tq *TaskQueue) Freqs(name string) map[float64]radio.FreqBand {
 	}
 	return ret
 }
+
+type TaskStates struct {
+	Running []TaskState
+	Paused  []TaskState
+}
+
+type TaskState struct {
+	Name          string
+	Band          radio.FreqBand
+	Id            TaskId
+	Priority      int
+	StartTime     time.Time
+	StopTime      time.Time
+	TotalDuration time.Duration
+}
+
+func (st *ScheduledTask) toTaskState() TaskState {
+	return TaskState{
+		Name:          st.Name(),
+		Band:          st.Band(),
+		Id:            st.Id,
+		StartTime:     st.startTime,
+		StopTime:      st.stopTime,
+		TotalDuration: st.totalDuration,
+	}
+}
+
+func (tq *TaskQueue) Serialize() TaskStates {
+	var ts TaskStates
+	tq.mu.RLock()
+	defer tq.mu.RUnlock()
+	ts.Running = make([]TaskState, 0, len(tq.Running))
+	ts.Paused = make([]TaskState, 0, len(tq.Paused))
+	for _, t := range tq.Running {
+		ts.Running = append(ts.Running, t.toTaskState())
+	}
+	for _, t := range tq.Paused {
+		ts.Paused = append(ts.Paused, t.toTaskState())
+	}
+	return ts
+}

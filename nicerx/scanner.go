@@ -10,7 +10,7 @@ import (
 )
 
 type Scanner struct {
-	sdr   *radio.SDR
+	sdr   radio.SDR
 	bands *store.BandStore
 
 	scanBand    radio.FreqBand
@@ -18,7 +18,7 @@ type Scanner struct {
 	bandwidth   float64
 }
 
-func NewScanner(sdr *radio.SDR, b *store.BandStore) *Scanner {
+func NewScanner(sdr radio.SDR, b *store.BandStore) *Scanner {
 	s := &Scanner{
 		sdr:         sdr,
 		bands:       b,

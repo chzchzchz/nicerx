@@ -10,16 +10,14 @@ const ppmBucketMHz = ppmSampleRate / ppmBuckets / 1.0e6
 const ppmCenterMHz = 162.0
 const ppmFFTs = 100
 
-func FindPPM(sdr *SDR) (float64, error) {
-	if err := sdr.SetSampleRate(ppmSampleRate); err != nil {
-		return 0, err
-	}
-	if err := sdr.SetCenterFreq(ppmCenterMHz * 1e6); err != nil {
+func FindPPM(sdr SDR) (float64, error) {
+	b := HzBand{Center: ppmCenterMHz * 1e6, Width: ppmSampleRate}
+	if err := sdr.SetBand(b); err != nil {
 		return 0, err
 	}
 	ppmFB := FreqBand{Center: ppmCenterMHz, Width: float64(ppmSampleRate) / 1e6}
 	sp := NewSpectralPower(ppmFB, ppmBuckets, ppmFFTs)
-	sp.Measure(NewIQReader(sdr).Batch64(ppmBuckets, ppmFFTs))
+	sp.Measure(sdr.Reader().Batch64(ppmBuckets, ppmFFTs))
 	topAvg, topFreq := 0.0, 0.0
 	for i, v := range sp.Average()[ppmBuckets/2+2:] {
 		if v > topAvg {

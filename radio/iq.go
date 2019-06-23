@@ -10,12 +10,24 @@ type IQReader struct {
 	err error
 }
 
+type MixerIQReader struct {
+	HzBand
+	*IQReader
+}
+
 // NewIQReader takes a reader that uses u8 I/Q samples.
 func NewIQReader(r io.Reader) *IQReader {
 	if r == nil {
 		panic("nil reader")
 	}
 	return &IQReader{r: r}
+}
+
+func NewMixerIQReader(r io.Reader, hzb HzBand) *MixerIQReader {
+	return &MixerIQReader{
+		HzBand:   hzb,
+		IQReader: NewIQReader(r),
+	}
 }
 
 func (iq *IQReader) Batch64(batch, limit int) <-chan []complex64 {

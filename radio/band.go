@@ -4,6 +4,14 @@ import (
 	"math"
 )
 
+type HzBand struct {
+	Center float64
+	Width  float64
+}
+
+func (hzb HzBand) ToMHz() FreqBand { return FreqBand{hzb.Center / 1e6, hzb.Width / 1e6} }
+
+// TODO: replace with HzBand
 type FreqBand struct {
 	Center float64
 	Width  float64

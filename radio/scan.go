@@ -10,17 +10,20 @@ type ScanConfig struct {
 var scanSampleRate = 2048000
 var scanWindowSamples = 32768
 
-func Scan(sdr *SDR, cfg ScanConfig) (ret []FreqBand) {
-	fb := FreqBand{Center: cfg.CenterMHz, Width: float64(scanSampleRate) / 1e6}
-	if err := sdr.SetBand(fb); err != nil {
+func Scan(sdr SDR, cfg ScanConfig) (ret []FreqBand) {
+	hzb := HzBand{Center: cfg.CenterMHz * 1e6, Width: float64(scanSampleRate)}
+	if err := sdr.SetBand(hzb); err != nil {
 		panic(err)
-		return nil
 	}
-	sp := NewSpectralPower(fb, scanWindowSamples, 50)
-	sp.Measure(NewIQReader(sdr).Batch64(scanWindowSamples, 50))
+	return ScanIQReader(sdr.Reader(), cfg.MinWidthMHz*1e6)
+}
+
+func ScanIQReader(iqr *MixerIQReader, minWidthHz float64) (ret []FreqBand) {
+	sp := NewSpectralPower(iqr.ToMHz(), scanWindowSamples, 50)
+	sp.Measure(iqr.Batch64(scanWindowSamples, 50))
 	spurs := sp.Spurs()
 	for _, fb := range sp.Bands() {
-		if fb.Width <= cfg.MinWidthMHz {
+		if fb.Width <= minWidthHz/1e6 {
 			continue
 		}
 		hasSpur := false

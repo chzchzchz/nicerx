@@ -9,7 +9,7 @@ import (
 )
 
 type Server struct {
-	SDR     *radio.SDR
+	SDR     radio.SDR
 	Bands   *store.BandStore
 	Tasks   *TaskQueue
 	Signals *store.SignalStore
@@ -19,7 +19,7 @@ type Server struct {
 	tcancel context.CancelFunc
 }
 
-func NewServer(sdr *radio.SDR) (*Server, error) {
+func NewServer(sdr radio.SDR) (*Server, error) {
 	ss, err := store.NewSignalStore("bands")
 	if err != nil {
 		return nil, err

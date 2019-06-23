@@ -13,10 +13,18 @@ import (
 	"github.com/chzchzchz/nicerx/store"
 )
 
-type httpHandler struct {
+type indexHandler struct {
 	s          *nicerx.Server
 	serverTmpl *template.Template
 	bandTmpl   *template.Template
+}
+
+func newIndexHandler(s *nicerx.Server) *indexHandler {
+	return &indexHandler{
+		s:          s,
+		serverTmpl: template.Must(template.New("server").Parse(serverTmplStr)),
+		bandTmpl:   template.Must(template.New("freq").Parse(bandTmplStr)),
+	}
 }
 
 const serverTmplStr = `<!DOCTYPE html>
@@ -141,21 +149,12 @@ th {
 </html>
 `
 
-func ServeHttp(s *nicerx.Server, serv string) error {
-	h := &httpHandler{
-		s:          s,
-		serverTmpl: template.Must(template.New("server").Parse(serverTmplStr)),
-		bandTmpl:   template.Must(template.New("freq").Parse(bandTmplStr)),
-	}
-	return http.ListenAndServe(serv, h)
-}
-
 type freqInfo struct {
 	Band         radio.FreqBand
 	Spectrograms []store.SignalFile
 }
 
-func (h *httpHandler) handleBand(w http.ResponseWriter, mhzStr string) {
+func (h *indexHandler) handleBand(w http.ResponseWriter, mhzStr string) {
 	mhz, err := strconv.ParseFloat(mhzStr, 64)
 	if err != nil {
 		io.WriteString(w, err.Error())
@@ -173,7 +172,7 @@ func (h *httpHandler) handleBand(w http.ResponseWriter, mhzStr string) {
 	}
 }
 
-func (h *httpHandler) handleCapture(mhzStr string) {
+func (h *indexHandler) handleCapture(mhzStr string) {
 	mhz, err := strconv.ParseFloat(mhzStr, 64)
 	if err != nil {
 		return
@@ -181,7 +180,7 @@ func (h *httpHandler) handleCapture(mhzStr string) {
 	h.s.Capture(mhz)
 }
 
-func (h *httpHandler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
+func (h *indexHandler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	if captureStr := q.Get("capture"); len(captureStr) > 0 {
 		h.handleCapture(captureStr)
@@ -203,7 +202,7 @@ func (h *httpHandler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *indexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		base := path.Base(r.URL.Path)
