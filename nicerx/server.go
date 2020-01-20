@@ -2,8 +2,10 @@ package nicerx
 
 import (
 	"context"
+	"io"
 	"sync"
 
+	"github.com/chzchzchz/nicerx/nicerx/receiver"
 	"github.com/chzchzchz/nicerx/radio"
 	"github.com/chzchzchz/nicerx/store"
 )
@@ -13,6 +15,8 @@ type Server struct {
 	Bands   *store.BandStore
 	Tasks   *TaskQueue
 	Signals *store.SignalStore
+
+	rxers map[string]*receiver.Rxer
 
 	mu      sync.RWMutex
 	tctx    context.Context
@@ -29,51 +33,47 @@ func NewServer(sdr radio.SDR) (*Server, error) {
 		Bands:   store.NewBandStore(),
 		Tasks:   NewTaskQueue(),
 		Signals: ss,
+		rxers:   make(map[string]*receiver.Rxer),
 	}
 	s.Bands.Load("bands.db")
-	s.resetCtx()
 	return s, nil
 }
 
 func (s *Server) Serve(ctx context.Context) error {
-	// s.Tasks.Add(NewScanner(s.SDR, s.Bands))
-	for {
-		if err := s.Tasks.Run(s.tctx); err != nil && err != s.tctx.Err() {
-			return err
-		}
-		if s.tctx.Err() != nil {
-			s.resetCtx()
-		}
-	}
-	return nil
+	<-ctx.Done()
+	return ctx.Err()
 }
 
-func (s *Server) Pause(tid TaskId) {
-	s.Tasks.Pause(tid)
-	s.resetTask()
-}
-
-func (s *Server) Resume(tid TaskId) {
-	s.Tasks.Resume(tid)
-	s.resetTask()
-}
-
-func (s *Server) Stop(tid TaskId) {
-	s.Tasks.Stop(tid)
-	s.resetTask()
-}
-
-func (s *Server) resetTask() {
+func (s *Server) Rxers() []receiver.RxConfigBase {
 	s.mu.RLock()
-	s.tcancel()
-	s.mu.RUnlock()
+	defer s.mu.RUnlock()
+	ret := make([]receiver.RxConfigBase, 0, len(s.rxers))
+	for _, v := range s.rxers {
+		ret = append(ret, v.RxConfigBase)
+	}
+	return ret
 }
 
-func (s *Server) resetCtx() {
-	tctx, tcancel := context.WithCancel(context.Background())
+func (s *Server) AddRxer(r *receiver.Rxer) {
 	s.mu.Lock()
-	s.tctx, s.tcancel = tctx, tcancel
-	s.mu.Unlock()
+	defer s.mu.Unlock()
+	s.rxers[r.UserName] = r
+}
+
+func (s *Server) DelRxer(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.rxers, name)
+}
+
+func (s *Server) OpenRxer(ctx context.Context, name string) (*receiver.RxStream, error) {
+	s.mu.RLock()
+	s.mu.RUnlock()
+	r := s.rxers[name]
+	if r == nil {
+		return nil, io.EOF
+	}
+	return r.Open(ctx, s.SDR.Reader()), nil
 }
 
 func (s *Server) Capture(centerMHz float64) {

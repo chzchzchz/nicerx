@@ -45,10 +45,15 @@ func (iq *IQReader) BatchStream64(ctx context.Context, batch, limit int) <-chan 
 				return
 			}
 			i++
-			_, iq.err = iq.r.Read(iq8buf)
-			if iq.err != nil {
-				return
+			sumBytes := 0
+			for sumBytes != len(iq8buf) {
+				readBytes := 0
+				if readBytes, iq.err = iq.r.Read(iq8buf[sumBytes:]); iq.err != nil {
+					return
+				}
+				sumBytes += readBytes
 			}
+
 			samps := make([]complex64, batch)
 			for i := 0; i < len(samps); i++ {
 				samps[i] = complex(

@@ -19,10 +19,40 @@ External decoders:
 
 ```sh
 go get github.com/chzchzchz/nicerx/cmd/nicerx
+go get github.com/chzchzchz/nicerx/cmd/sdrproxy
 ```
 
-## Run
+## nicerx
 
-``sh
+### Run
+
+```sh
 nicerx serve
 ```
+
+### API
+
+
+#### Tuning a radio
+
+```sh
+curl -f http://localhost:8080/api/sdr/tune  -XPOST -D'{"id" : "radio1", "center_hz" : 433000000, "width_hz" : 2048000}'
+```
+
+##### Receivers
+
+Add a scanner:
+```sh
+curl  -f -v http://localhost:8080/api/rx/  -XPOST -d'{"user_name": "my_scanner", "type_name" : "scan"}'
+```
+
+Stream scan data:
+```sh
+curl -v http://localhost:8080/api/rx/my_scanner
+```
+
+Delete it:
+```sh
+curl  -f -v http://localhost:8080/api/rx/my_scanner  -XDELETE
+```
+

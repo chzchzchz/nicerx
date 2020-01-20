@@ -11,9 +11,8 @@ import (
 )
 
 type SDRTune struct {
-	Id         string `json:"id"`
-	CenterHz   uint64 `json:"center_hz"`
-	SampleRate uint32 `json:"sample_rate"`
+	Id string `json:"id"`
+	radio.HzBand
 }
 
 type sdrHandler struct {
@@ -39,8 +38,7 @@ func (s *sdrHandler) handleTune(w http.ResponseWriter, r *http.Request) {
 	if err = json.Unmarshal(b, &msg); err != nil {
 		return
 	}
-	hzb := radio.HzBand{Center: float64(msg.CenterHz), Width: float64(msg.SampleRate)}
-	if err = s.s.SDR.SetBand(hzb); err != nil {
+	if err = s.s.SDR.SetBand(msg.HzBand); err != nil {
 		return
 	}
 }

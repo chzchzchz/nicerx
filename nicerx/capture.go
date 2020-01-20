@@ -31,8 +31,8 @@ func NewCapture(sdr radio.SDR,
 func (c *Capture) Band() radio.FreqBand { return c.band }
 
 func (c *Capture) Step(ctx context.Context) error {
-	hzb := radio.HzBand{Center: c.band.Center*1e6 - offsetHz, Width: float64(sdrRate)}
-	if err := c.sdr.SetBand(hzb); err != nil {
+	fb := radio.FreqBand{Center: c.band.Center - offsetHz/1e6, Width: float64(sdrRate)}
+	if err := c.sdr.SetBand(fb.ToHzBand()); err != nil {
 		return err
 	}
 
@@ -40,9 +40,6 @@ func (c *Capture) Step(ctx context.Context) error {
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	sampc := c.sdr.Reader().BatchStream64(cctx, windowSamples, 0)
-	fb := radio.FreqBand{
-		Center: hzb.Center / 1e6,
-		Width:  float64(sdrRate) / 1e6}
 	sp := radio.NewSpectralPower(fb, windowSamples, windowSize)
 	readWindow := func() (samps [][]complex64) {
 		windowc, donec := make(chan []complex64, windowSize), make(chan struct{})

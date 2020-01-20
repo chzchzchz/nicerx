@@ -9,6 +9,7 @@ import (
 func ServeHttp(s *nicerx.Server, serv string) error {
 	mux := http.NewServeMux()
 	mux.Handle("/api/sdr/", http.StripPrefix("/api/sdr", newSDRHandler(s)))
+	mux.Handle("/api/rx/", http.StripPrefix("/api/rx", newRXHandler(s)))
 	mux.Handle("/", newIndexHandler(s))
 	return http.ListenAndServe(serv, mux)
 }

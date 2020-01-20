@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"sync"
 	"time"
 
 	"github.com/bemasher/rtltcp"
@@ -15,20 +16,28 @@ import (
 
 var minFreqHz = uint32(25000000)
 var maxFreqHz = uint32(1750000000)
+var minRate = uint32(225000)
+var maxRate = uint32(3200000)
 
 type rtlSDR struct {
 	*rtltcp.SDR
 	cmd  *exec.Cmd
 	fpty *os.File
+	// device serial number or device index
+	serialNumber string
 
 	lastCenter        uint32
 	lastSampleRate    uint32
 	lastPPM           uint32
 	lastCalibrateTime time.Time
+
+	iqr *MixerIQReader
+	mu  sync.RWMutex
 }
 
-func newRTLSDR(ctx context.Context) (SDR, error) {
-	cmd := exec.CommandContext(ctx, "rtl_tcp", "-a", "127.0.0.1", "-p", "12345")
+func newRTLSDR(ctx context.Context, ser string) (*rtlSDR, error) {
+	// TODO: support different ports
+	cmd := exec.CommandContext(ctx, "rtl_tcp", "-a", "127.0.0.1", "-p", "12345", "-d", ser, "-s", "240000")
 	fpty, err := pty.Start(cmd)
 	if err != nil {
 		return nil, err
@@ -40,50 +49,65 @@ func newRTLSDR(ctx context.Context) (SDR, error) {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	return &rtlSDR{fpty: fpty, cmd: cmd}, nil
+	return &rtlSDR{fpty: fpty, cmd: cmd, serialNumber: ser}, nil
 }
 
 func (s *rtlSDR) SetFreqCorrection(ppm uint32) error {
-	s.lastPPM = ppm
+	if err := s.initSDR(); err != nil {
+		return err
+	}
+	s.lastPPM, s.lastCalibrateTime = ppm, time.Now()
 	return s.SDR.SetFreqCorrection(ppm)
 }
 
 func (s *rtlSDR) SetBand(b HzBand) error {
-	if s.SDR == nil {
-		if err := s.resetConn(); err != nil {
-			return err
-		}
+	if b.Center < uint64(minFreqHz) || b.Center > uint64(maxFreqHz) {
+		return ErrFrequencyOutOfRange
 	}
+	if !isValidRate(uint32(b.Width)) {
+		return ErrRateOutOfRange
+	}
+	if err := s.initSDR(); err != nil {
+		return err
+	}
+
+	// TODO: don't necessarily recalibrate; slow if not needed / ppm known.
 	if time.Since(s.lastCalibrateTime) > 5*time.Minute {
+		s.lastCalibrateTime = time.Now()
 		if s.lastCalibrateTime.IsZero() {
 			if err := s.SDR.SetAGCMode(true); err != nil {
 				return err
 			}
 		}
-		s.lastCalibrateTime = time.Now()
 		if err := Calibrate(s); err != nil {
 			return err
 		}
 	}
+
 	newFreq, newRate := uint32(b.Center), uint32(b.Width)
-	if newFreq == s.lastCenter && newRate == s.lastSampleRate {
-		return nil
+	if err := s.SetCenterFreq(newFreq); err != nil {
+		return err
 	}
 	if err := s.SetSampleRate(newRate); err != nil {
 		return err
 	}
-	return s.SetCenterFreq(newFreq)
+
+	// Reset connection so following reads get the new tuned band.
+	return s.resetConn()
 }
 
 func (s *rtlSDR) Info() SDRHWInfo {
 	return SDRHWInfo{
-		Id:            "Id",
-		BitDepth:      8,
+		Id: s.serialNumber,
+		SDRFormat: SDRFormat{
+			BitDepth:   8,
+			CenterHz:   uint64(s.lastCenter),
+			SampleRate: s.lastSampleRate,
+		},
 		MinHz:         uint64(minFreqHz),
 		MaxHz:         uint64(maxFreqHz),
-		MaxSampleRate: 2048000,
-		CenterHz:      s.lastCenter,
-		SampleRate:    s.lastSampleRate,
+		MinSampleRate: minRate,
+		MaxSampleRate: maxRate,
 	}
 }
 
@@ -94,10 +118,7 @@ func (s *rtlSDR) Close() error {
 }
 
 func (s *rtlSDR) band() HzBand {
-	return HzBand{
-		Center: float64(s.lastCenter),
-		Width:  float64(s.lastSampleRate),
-	}
+	return HzBand{uint64(s.lastCenter), uint64(s.lastSampleRate)}
 }
 
 type eofReader struct{}
@@ -105,10 +126,14 @@ type eofReader struct{}
 func (e *eofReader) Read(p []byte) (int, error) { return 0, io.EOF }
 
 func (s *rtlSDR) Reader() *MixerIQReader {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.SDR == nil {
 		return NewMixerIQReader(&eofReader{}, s.band())
+	} else if s.iqr == nil {
+		s.iqr = NewMixerIQReader(s.SDR, s.band())
 	}
-	return NewMixerIQReader(s.SDR, s.band())
+	return s.iqr
 }
 
 func (s *rtlSDR) stop() error {
@@ -116,7 +141,7 @@ func (s *rtlSDR) stop() error {
 		return nil
 	}
 	err := s.SDR.Close()
-	s.SDR = nil
+	s.SDR, s.iqr = nil, nil
 	return err
 }
 
@@ -126,33 +151,38 @@ func (s *rtlSDR) resetConn() (err error) {
 	return err
 }
 
-func (s *rtlSDR) SetSampleRate(rate uint32) (err error) {
-	if err := s.setSampleRate(rate); err != nil {
-		return err
-	}
-	return s.resetConn()
+func isValidRate(rate uint32) bool {
+	return !((rate <= 225000) || (rate > 3200000) ||
+		((rate > 300000) && (rate <= 900000)))
 }
 
-func (s *rtlSDR) setSampleRate(rate uint32) error {
-	if s.lastSampleRate != rate {
-		if err := s.SDR.SetSampleRate(rate); err != nil {
-			return err
-		}
-		s.lastSampleRate = rate
+func (s *rtlSDR) SetSampleRate(rate uint32) (err error) {
+	if !isValidRate(rate) {
+		return ErrRateOutOfRange
 	}
+	if s.lastSampleRate == rate {
+		return nil
+	}
+	if err := s.initSDR(); err != nil {
+		return err
+	}
+	if err := s.SDR.SetSampleRate(rate); err != nil {
+		return err
+	}
+	s.lastSampleRate = rate
 	return nil
 }
 
 func (s *rtlSDR) SetCenterFreq(cent uint32) error {
-	if err := s.setCenterFreq(cent); err != nil {
+	if err := s.initSDR(); err != nil {
 		return err
 	}
-	return s.resetConn()
+	return s.setCenterFreq(cent)
 }
 
 func (s *rtlSDR) setCenterFreq(cent uint32) error {
 	if cent < minFreqHz || cent > maxFreqHz {
-		return fmt.Errorf("out of range")
+		return ErrFrequencyOutOfRange
 	}
 	if s.lastCenter != cent {
 		if err := s.SDR.SetCenterFreq(cent); err != nil {
@@ -183,4 +213,13 @@ func connect(ctx context.Context) (*rtltcp.SDR, error) {
 		}
 	}
 	return nil, err
+}
+
+func (s *rtlSDR) initSDR() (err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.SDR == nil {
+		err = s.resetConn()
+	}
+	return err
 }

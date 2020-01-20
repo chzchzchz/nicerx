@@ -184,15 +184,6 @@ func (h *indexHandler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	if captureStr := q.Get("capture"); len(captureStr) > 0 {
 		h.handleCapture(captureStr)
-	} else if s := q.Get("resume"); len(s) > 0 {
-		tid, _ := strconv.ParseInt(s, 10, 64)
-		h.s.Resume(nicerx.TaskId(tid))
-	} else if s := q.Get("pause"); len(s) > 0 {
-		tid, _ := strconv.ParseInt(s, 10, 64)
-		h.s.Pause(nicerx.TaskId(tid))
-	} else if s := q.Get("stop"); len(s) > 0 {
-		tid, _ := strconv.ParseInt(s, 10, 64)
-		h.s.Stop(nicerx.TaskId(tid))
 	} else {
 		if err := h.serverTmpl.Execute(w, h.s); err != nil {
 			io.WriteString(w, err.Error())

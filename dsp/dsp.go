@@ -93,6 +93,29 @@ func Lowpass(cutoffHz float64,
 	return outc
 }
 
+func ResampleComplex64(r float32, sigc <-chan []complex64) <-chan []complex64 {
+	outc := make(chan []complex64, 1)
+	q := C.resamp_crcf_create_default(C.float(r))
+	go func() {
+		defer func() {
+			close(outc)
+			C.resamp_crcf_destroy(q)
+		}()
+		for samps := range sigc {
+			outsamp := make([]complex64, int(math.Ceil(float64(r)*float64(len(samps)))))
+			var outlen uint
+			C.resamp_crcf_execute_block(q,
+				(*C.complexfloat)(unsafe.Pointer(&samps[0])),
+				C.uint(len(samps)),
+				(*C.complexfloat)(unsafe.Pointer(&outsamp[0])),
+				(*C.uint)(unsafe.Pointer(&outlen)))
+			outsamp = outsamp[:outlen]
+			outc <- outsamp
+		}
+	}()
+	return outc
+}
+
 func Resample(r float32, sigc <-chan []float32) <-chan []float32 {
 	outc := make(chan []float32, 1)
 	q := C.resamp_rrrf_create_default(C.float(r))

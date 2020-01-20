@@ -2,8 +2,12 @@ package radio
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
+
+var ErrRateOutOfRange = errors.New("sample rate out of range")
+var ErrFrequencyOutOfRange = errors.New("frequency out of range")
 
 type SDR interface {
 	SetBand(b HzBand) error
@@ -13,16 +17,21 @@ type SDR interface {
 	Reader() *MixerIQReader
 }
 
+type SDRFormat struct {
+	BitDepth   uint   `json:"bit_depth"`
+	CenterHz   uint64 `json:"center_hz"`
+	SampleRate uint32 `json:"sample_rate"`
+}
+
 type SDRHWInfo struct {
 	Id string `json:"id"`
 
-	BitDepth      uint   `json:"bit_depth"`
 	MinHz         uint64 `json:"min_hz"`
 	MaxHz         uint64 `json:"max_hz"`
+	MinSampleRate uint32 `json:"min_sample_rate"`
 	MaxSampleRate uint32 `json:"max_sample_rate"`
 
-	CenterHz   uint32 `json:"center_hz"`
-	SampleRate uint32 `json:"sample_rate"`
+	SDRFormat
 }
 
 func Calibrate(s SDR) error {
@@ -52,4 +61,6 @@ func Calibrate(s SDR) error {
 	return nil
 }
 
-func NewSDR(ctx context.Context) (SDR, error) { return newRTLSDR(ctx) }
+func NewSDR(ctx context.Context) (SDR, error) { return newRTLSDR(ctx, "0") }
+
+func NewSDRWithSerial(ctx context.Context, ser string) (SDR, error) { return newRTLSDR(ctx, ser) }
