@@ -22,6 +22,21 @@ go get github.com/chzchzchz/nicerx/cmd/nicerx
 go get github.com/chzchzchz/nicerx/cmd/sdrproxy
 ```
 
+## sdrproxy
+
+### Run
+
+```sh
+sdrproxy --bind localhost:12000
+```
+
+### API
+
+```sh
+curl -v localhost:12000/api/rx/ -d'{"center_hz" : 941330000, "width_hz" : 15000, "radio" : "3e78268d"}' -o out.dat
+```
+
+
 ## nicerx
 
 ### Run

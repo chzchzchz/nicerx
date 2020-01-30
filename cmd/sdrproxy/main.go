@@ -3,23 +3,19 @@ package main
 import (
 	"flag"
 	"log"
-	"net/http"
-)
 
-func ServeHttp(s *Server, serv string) error {
-	mux := http.NewServeMux()
-	mux.Handle("/api/rx/", http.StripPrefix("/api/rx", newRXHandler(s)))
-	// mux.Handle("/api/sdr/", ...) // add/remove/list sdr status
-	// mux.Handle("/", newIndexHandler(s))
-	return http.ListenAndServe(serv, mux)
-}
+	"github.com/chzchzchz/nicerx/sdrproxy/http"
+	"github.com/chzchzchz/nicerx/sdrproxy/server"
+)
 
 var bindServ = flag.String("bind", "localhost:12000", "address to bind server")
 
 func main() {
 	flag.Parse()
+
 	log.Printf("listening on %s", *bindServ)
-	if err := ServeHttp(NewServer(), *bindServ); err != nil {
+	s := server.NewServer()
+	if err := http.ServeHttp(s, *bindServ); err != nil {
 		panic(err)
 	}
 }
