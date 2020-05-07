@@ -32,10 +32,16 @@ sdrproxy --bind localhost:12000
 
 ### API
 
+Read a radio stream:
 ```sh
 curl -v localhost:12000/api/rx/ -d'{"center_hz" : 941330000, "width_hz" : 15000, "radio" : "3e78268d"}' -o out.dat
 ```
 
+Open a rtlsdr server:
+```sh
+curl -v localhost:12000/api/rx/ -d'{"center_hz" : 941330000, "width_hz" : 15000, "radio" : "3e78268d"}' -o out.dat
+
+```
 
 ## nicerx
 

@@ -2,27 +2,23 @@ package server
 
 import (
 	"context"
-	"log"
 	"sync"
 
-	"github.com/chzchzchz/nicerx/dsp"
 	"github.com/chzchzchz/nicerx/radio"
 	"github.com/chzchzchz/nicerx/sdrproxy"
 )
 
-type Signal struct {
-	req  sdrproxy.RxRequest
-	resp sdrproxy.RxResponse
-
-	serv   *Server
-	sdr    radio.SDR
-	sigc   <-chan []complex64
-	cancel context.CancelFunc
-}
-
 type Server struct {
+	// signals holds all signals attached.
 	signals map[string]*Signal
-	rwmu    sync.RWMutex
+
+	// sdrs holds all open SDRs.
+	sdrs map[string]radio.SDR
+
+	// muxers holds all SDR muxer readers
+	// TODO TODO TODO
+
+	rwmu sync.RWMutex
 }
 
 func NewServer() *Server {
@@ -33,7 +29,6 @@ func NewServer() *Server {
 
 func (s *Server) OpenSignal(ctx context.Context, req sdrproxy.RxRequest) (sig *Signal, err error) {
 	cctx, cancel := context.WithCancel(ctx)
-
 	sig = &Signal{req: req, serv: s, cancel: cancel}
 	s.rwmu.Lock()
 	if _, ok := s.signals[req.Name]; ok {
@@ -46,34 +41,13 @@ func (s *Server) OpenSignal(ctx context.Context, req sdrproxy.RxRequest) (sig *S
 		return nil, err
 	}
 
-	if sig.sdr, err = radio.NewSDRWithSerial(cctx, req.Radio); err != nil {
-		s.removeSignal(req.Name)
-		return nil, err
-	}
-	// Setup band by choosing rate and filters to get band via SDR bands.
-	info, sdrBand := sig.sdr.Info(), req.HzBand
-	processSignal := func(ch <-chan []complex64) <-chan []complex64 { return ch }
-	sdrBand.Width = uint64(getSampleRate(uint32(sdrBand.Width)))
-	if sdrBand.Width != req.HzBand.Width {
-		log.Print("upsample to ", sdrBand.Width, " and downsample to ", req.HzBand.Width)
-		processSignal = func(ch <-chan []complex64) <-chan []complex64 {
-			/* Oversample, lowpass, downsample */
-			lpc := dsp.Lowpass(float64(req.HzBand.Width), int(sdrBand.Width), 1, ch)
-			resampleRatio := float32(req.HzBand.Width) / float32(sdrBand.Width)
-			return dsp.ResampleComplex64(resampleRatio, lpc)
-		}
-	}
-	if err = sig.sdr.SetBand(sdrBand); err != nil {
-		cancel()
-		sig.sdr.Close()
-		s.removeSignal(req.Name)
-		return nil, err
+	r, err := s.openMuxReader(req)
+	if err != nil {
+		return err
 	}
 
-	/* TODO: xlate filter to avoid DC bias */
-	sig.sigc = processSignal(sig.sdr.Reader().BatchStream64(cctx, int(sdrBand.Width), 0))
-
-	info = sig.sdr.Info()
+	sig.sigc = newSignalChannel(cctx, req.HzBand, r)
+	info := sdr.Info()
 	dataFormat := radio.SDRFormat{
 		BitDepth:   info.BitDepth,
 		CenterHz:   req.HzBand.Center,
@@ -83,27 +57,78 @@ func (s *Server) OpenSignal(ctx context.Context, req sdrproxy.RxRequest) (sig *S
 	return sig, err
 }
 
+func (s *Server) openMuxReader(req sdrproxy.RxRequest) (*MixerIQReader, error) {
+	sdr, err := s.openSDR(req)
+	if err != nil {
+		s.removeSignal(req.Name)
+		return nil, err
+	}
+	panic("oops")
+	return sdr.Reader(), nil
+}
+
+func (s *Server) openSDR(req sdrproxy.RxRequest) (radio.SDR, error) {
+	sdr, err := radio.NewSDRWithSerial(context.TODO(), req.Radio)
+	if err != nil {
+		return nil, err
+	}
+	s.rwmu.Lock()
+	// Don't create new SDR if one was created in the meantime.
+	if curSDR, ok := s.sdrs[req.Radio]; ok {
+		delete(s.sdrs, req.Radio)
+		defer sdr.Close()
+		s.rwmu.Unlock()
+		return curSDR, nil
+	} else {
+		s.sdrs[req.Radio] = sdr
+	}
+	s.rwmu.Unlock()
+
+	sdrBand := req.HzBand
+	// TODO: tune to max bandwidth?
+	sdrBand.Width = uint64(getSampleRate(uint32(sdrBand.Width)))
+	if err = sdr.SetBand(sdrBand); err != nil {
+		sdr.Close()
+		s.rwmu.Lock()
+		delete(s.sdrs, req.Radio)
+		s.rwmu.Unlock()
+		return nil, err
+	}
+	return sdr, nil
+}
+
+func (s *Server) Close() {
+	s.rwmu.Lock()
+	for _, sdr := range s.sdrs {
+		sdr.Close()
+	}
+	s.sdrs = make(map[string]radio.SDR)
+	s.rwmu.Unlock()
+	return
+}
+
 func (s *Server) removeSignal(name string) {
 	s.rwmu.Lock()
+	sig := s.signals[name]
 	delete(s.signals, name)
 	s.rwmu.Unlock()
-}
-
-func (s *Signal) Response() sdrproxy.RxResponse { return s.resp }
-
-func (s *Signal) Chan() <-chan []complex64 { return s.sigc }
-
-func (s *Signal) stop() error {
-	s.cancel()
-	for range <-s.sigc {
+	if sig != nil {
+		s.closeSDR(sig.req.Radio)
 	}
-	return s.sdr.Close()
 }
 
-func (s *Signal) Close() error {
-	err := s.stop()
-	s.serv.removeSignal(s.req.Name)
-	return err
+func (s *Server) closeSDR(name string) {
+	s.rwmu.Lock()
+	for _, sig := range s.signals {
+		if sig.req.Radio == name {
+			s.rwmu.Unlock()
+			return
+		}
+	}
+	// No signals reference SDR; may close.
+	s.sdrs[name].Close()
+	delete(s.sdrs, name)
+	s.rwmu.Unlock()
 }
 
 func (s *Server) Signals() (ret []sdrproxy.RxSignal) {

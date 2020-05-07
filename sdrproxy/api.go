@@ -13,7 +13,7 @@ var ErrSignalExists = errors.New("signal by that name exists")
 
 type RxRequest struct {
 	radio.HzBand
-	// Name is an optional name. I don't use it for anything.
+	// Name is an optional "pretty" name to refer to this channel.
 	Name string `json:"name"`
 	// Radio is the unique identifier for some radio on the system.
 	Radio string `json:"radio"`
