@@ -36,17 +36,20 @@ func (rxh *rxHandler) handlePost(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Signal", string(respBytes))
 	w.Header().Set("Content-Type", "application/octet-stream")
 
-	fname := fmt.Sprintf("%uhz_%uKHz.iq8", req.HzBand.Center, req.HzBand.Width)
+	bw := req.HzBand.Width
+	fname := fmt.Sprintf("%v:[%v,%v].iq8", req.HzBand.Center, req.HzBand.Center-bw/2, req.HzBand.Center+bw/2)
 	w.Header().Set("Content-Disposition", `inline; filename="`+fname+`"`)
 
 	// Stream out data.
 	iqw := radio.NewIQWriter(w)
 	for sig := range s.Chan() {
+		log.Println("writing to write64 samples", len(sig))
 		if err = iqw.Write64(sig); err != nil {
 			log.Printf("sigc error: %v", err)
 			break
 		}
 	}
+	log.Printf("done streaming %v", req.Name)
 	return nil
 }
 
@@ -73,4 +76,5 @@ func (rxh *rxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+
 }

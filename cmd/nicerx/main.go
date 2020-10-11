@@ -141,7 +141,7 @@ func demod(inf, outf string) {
 	for rsamps := range resampc {
 		outsamps := make([]int16, len(rsamps))
 		for i, v := range rsamps {
-			outsamps[i] = int16(v * 65536)
+			outsamps[i] = int16((v / 2.0) * 65536)
 		}
 		if err := binary.Write(fout, binary.LittleEndian, outsamps); err != nil {
 			panic(err)

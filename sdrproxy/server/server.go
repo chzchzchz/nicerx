@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"log"
 	"sync"
 
 	"github.com/chzchzchz/nicerx/radio"
@@ -23,6 +24,7 @@ type Server struct {
 
 func NewServer() *Server {
 	return &Server{
+		sdrs:    make(map[string]radio.SDR),
 		signals: make(map[string]*Signal),
 	}
 }
@@ -41,29 +43,30 @@ func (s *Server) OpenSignal(ctx context.Context, req sdrproxy.RxRequest) (sig *S
 		return nil, err
 	}
 
+	log.Printf("opening mux reader for %+v", req)
 	r, err := s.openMuxReader(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	log.Println("get new signal", req.HzBand)
 	sig.sigc = newSignalChannel(cctx, req.HzBand, r)
-	info := sdr.Info()
 	dataFormat := radio.SDRFormat{
-		BitDepth:   info.BitDepth,
+		BitDepth:   8, //info.BitDepth,
 		CenterHz:   req.HzBand.Center,
 		SampleRate: uint32(req.HzBand.Width),
 	}
-	sig.resp = sdrproxy.RxResponse{Format: dataFormat, Radio: info}
-	return sig, err
+	log.Println("got new signal", req.HzBand)
+	sig.resp = sdrproxy.RxResponse{Format: dataFormat /*, Radio: sdr.Info()*/}
+	return sig, nil
 }
 
-func (s *Server) openMuxReader(req sdrproxy.RxRequest) (*MixerIQReader, error) {
+func (s *Server) openMuxReader(req sdrproxy.RxRequest) (*radio.MixerIQReader, error) {
 	sdr, err := s.openSDR(req)
 	if err != nil {
 		s.removeSignal(req.Name)
 		return nil, err
 	}
-	panic("oops")
 	return sdr.Reader(), nil
 }
 
@@ -73,16 +76,14 @@ func (s *Server) openSDR(req sdrproxy.RxRequest) (radio.SDR, error) {
 		return nil, err
 	}
 	s.rwmu.Lock()
+	defer s.rwmu.Unlock()
 	// Don't create new SDR if one was created in the meantime.
 	if curSDR, ok := s.sdrs[req.Radio]; ok {
-		delete(s.sdrs, req.Radio)
 		defer sdr.Close()
-		s.rwmu.Unlock()
 		return curSDR, nil
 	} else {
 		s.sdrs[req.Radio] = sdr
 	}
-	s.rwmu.Unlock()
 
 	sdrBand := req.HzBand
 	// TODO: tune to max bandwidth?
@@ -143,9 +144,9 @@ func (s *Server) Signals() (ret []sdrproxy.RxSignal) {
 
 // TODO: move into radio code probably
 func getSampleRate(wantRate uint32) uint32 {
-	rates := []uint32{240000, 960000, 1152000, 1600000, 1800000, 1920000, 2400000}
+	rates := []uint32{240000, 960000, 1024000, 1152000, 1600000, 1800000, 1920000, 2048000, 2400000}
 	for _, v := range rates {
-		if wantRate < v {
+		if wantRate <= v {
 			return v
 		}
 	}

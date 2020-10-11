@@ -13,6 +13,7 @@ var bindServ = flag.String("bind", "localhost:12000", "address to bind server")
 func main() {
 	flag.Parse()
 
+	log.SetFlags(log.Lmsgprefix | log.LstdFlags)
 	log.Printf("listening on %s", *bindServ)
 	s := server.NewServer()
 	if err := http.ServeHttp(s, *bindServ); err != nil {
