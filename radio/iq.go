@@ -1,9 +1,9 @@
 package radio
 
 import (
-	"log"
 	"context"
 	"io"
+	"log"
 	"sync"
 	"time"
 )
@@ -72,11 +72,11 @@ func (iq *IQReader) dispatch() error {
 			readBytes := 0
 			if readBytes, iq.err = iq.r.Read(iq8buf[sumBytes:]); iq.err != nil {
 				iq.mu.Lock()
+				defer iq.mu.Unlock()
 				for iqc := range iq.chans {
 					close(iqc.c)
 				}
 				iq.chans = make(map[*iqChannel]struct{})
-				defer iq.mu.Unlock()
 				return iq.err
 			}
 			sumBytes += readBytes
@@ -96,6 +96,11 @@ func (iq *IQReader) dispatch() error {
 
 		iq.mu.Lock()
 
+		tc := ticker.C
+		if len(iq.chans) == 1 {
+			tc = nil
+		}
+
 		// Broadcast.
 		for iqc := range iq.chans {
 			ok := false
@@ -104,7 +109,8 @@ func (iq *IQReader) dispatch() error {
 				iqc.sent++
 				ok = iqc.limit == 0 || iqc.sent < iqc.limit
 			case <-iqc.ctx.Done():
-			case <-ticker.C:
+				log.Println("canceled channel")
+			case <-tc:
 				log.Println("channel too slow")
 			}
 			if !ok {

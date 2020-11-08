@@ -8,8 +8,10 @@ import (
 
 func ServeHttp(s *server.Server, serv string) error {
 	mux := http.NewServeMux()
+	// Add/remove/list rx streams.
 	mux.Handle("/api/rx/", http.StripPrefix("/api/rx", newRXHandler(s)))
-	// mux.Handle("/api/sdr/", ...) // add/remove/list sdr status
+	// Add/remove/list sdr status.
+	mux.Handle("/api/sdr/", http.StripPrefix("/api/sdr", newSDRHandler(s)))
 	// mux.Handle("/", newIndexHandler(s))
 	return http.ListenAndServe(serv, mux)
 }

@@ -42,14 +42,16 @@ func (rxh *rxHandler) handlePost(w http.ResponseWriter, r *http.Request) error {
 
 	// Stream out data.
 	iqw := radio.NewIQWriter(w)
+	log.Println("begin reading signal..")
 	for sig := range s.Chan() {
-		log.Println("writing to write64 samples", len(sig))
+		log.Println("writing to write64 samples", len(sig), r.RemoteAddr)
 		if err = iqw.Write64(sig); err != nil {
 			log.Printf("sigc error: %v", err)
 			break
 		}
+		log.Println("waiting on signal channel", r.RemoteAddr)
 	}
-	log.Printf("done streaming %v", req.Name)
+	log.Println("done streaming", req.Name, r.RemoteAddr)
 	return nil
 }
 

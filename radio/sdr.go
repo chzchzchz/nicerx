@@ -64,3 +64,7 @@ func Calibrate(s SDR) error {
 func NewSDR(ctx context.Context) (SDR, error) { return newRTLSDR(ctx, "0") }
 
 func NewSDRWithSerial(ctx context.Context, ser string) (SDR, error) { return newRTLSDR(ctx, ser) }
+
+func SDRList(ctx context.Context) ([]SDRHWInfo, error) {
+	return rtlSDRList(ctx)
+}

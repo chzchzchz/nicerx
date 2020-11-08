@@ -29,11 +29,16 @@ static void firfilt_crcf_block(
 import "C"
 
 import (
+	"context"
 	"math"
 	"unsafe"
 )
 
 func MixDown(mixHz float64, sampHz int, sigc <-chan []complex64) <-chan []complex64 {
+	return MixDownCtx(context.TODO(), mixHz, sampHz, sigc)
+}
+
+func MixDownCtx(ctx context.Context, mixHz float64, sampHz int, sigc <-chan []complex64) <-chan []complex64 {
 	q := C.nco_crcf_create(C.LIQUID_NCO)
 	C.nco_crcf_set_phase(q, C.float(0))
 	outc := make(chan []complex64, 1)
@@ -43,6 +48,9 @@ func MixDown(mixHz float64, sampHz int, sigc <-chan []complex64) <-chan []comple
 			close(outc)
 		}()
 		radiansPerSample := mixHz * (2.0 * math.Pi / float64(sampHz))
+		if radiansPerSample < 0 {
+			radiansPerSample += 2.0 * math.Pi
+		}
 		C.nco_crcf_set_frequency(q, C.float(radiansPerSample))
 		for samp := range sigc {
 			outsamp := make([]complex64, len(samp))
@@ -51,13 +59,26 @@ func MixDown(mixHz float64, sampHz int, sigc <-chan []complex64) <-chan []comple
 				(*C.complexfloat)(unsafe.Pointer(&samp[0])),
 				(*C.complexfloat)(unsafe.Pointer(&outsamp[0])),
 				C.uint(len(samp)))
-			outc <- outsamp
+			select {
+			case outc <- outsamp:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 	return outc
 }
 
 func Lowpass(cutoffHz float64,
+	sampHz int,
+	decRate int,
+	sigc <-chan []complex64) <-chan []complex64 {
+	return LowpassCtx(context.TODO(), cutoffHz, sampHz, decRate, sigc)
+}
+
+func LowpassCtx(
+	ctx context.Context,
+	cutoffHz float64,
 	sampHz int,
 	decRate int,
 	sigc <-chan []complex64) <-chan []complex64 {
@@ -87,13 +108,21 @@ func Lowpass(cutoffHz float64,
 				(*C.complexfloat)(unsafe.Pointer(&outsamp[0])),
 				C.uint(len(samp)),
 				C.uint(decRate))
-			outc <- outsamp
+			select {
+			case outc <- outsamp:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 	return outc
 }
 
 func ResampleComplex64(r float32, sigc <-chan []complex64) <-chan []complex64 {
+	return ResampleComplex64Ctx(context.TODO(), r, sigc)
+}
+
+func ResampleComplex64Ctx(ctx context.Context, r float32, sigc <-chan []complex64) <-chan []complex64 {
 	outc := make(chan []complex64, 1)
 	q := C.resamp_crcf_create_default(C.float(r))
 	go func() {
@@ -110,7 +139,11 @@ func ResampleComplex64(r float32, sigc <-chan []complex64) <-chan []complex64 {
 				(*C.complexfloat)(unsafe.Pointer(&outsamp[0])),
 				(*C.uint)(unsafe.Pointer(&outlen)))
 			outsamp = outsamp[:outlen]
-			outc <- outsamp
+			select {
+			case outc <- outsamp:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 	return outc

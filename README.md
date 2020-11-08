@@ -1,6 +1,6 @@
 # niceRX
 
-A software defined radio platform.
+Software defined radio tools and daemons.
 
 ## Build
 
@@ -11,10 +11,6 @@ Libraries:
 * [liquid-dsp](https://github.com/jgaeddert/liquid-dsp)
 * [rtl\_tcp](https://osmocom.org/projects/rtl-sdr/wiki)
 
-External decoders:
-* [multimon-ng](https://github.com/EliasOenal/multimon-ng)
-* [dsd](https://github.com/szechyjs/dsd)
-
 ### Compile from sources
 
 ```sh
@@ -23,6 +19,8 @@ go get github.com/chzchzchz/nicerx/cmd/sdrproxy
 ```
 
 ## sdrproxy
+
+Multiplexes and channelizes SDR data via a RESTful JSON interface.
 
 ### Run
 
@@ -37,43 +35,8 @@ Read a radio stream:
 curl -v localhost:12000/api/rx/ -d'{"center_hz" : 941330000, "width_hz" : 15000, "radio" : "3e78268d"}' -o out.dat
 ```
 
-Open a rtlsdr server:
+Read a radio stream with hinting to bind SDR to wider bandwidth:
 ```sh
-curl -v localhost:12000/api/rx/ -d'{"center_hz" : 941330000, "width_hz" : 15000, "radio" : "3e78268d"}' -o out.dat
+curl -N -v localhost:12000/api/rx/ -d'{"hint_tune_hz" : 929800000, "center_hz" : 929612000, "width_hz" : 30000, "radio" : "20000001"}' -o ~/radio.fifo
 
 ```
-
-## nicerx
-
-### Run
-
-```sh
-nicerx serve
-```
-
-### API
-
-
-#### Tuning a radio
-
-```sh
-curl -f http://localhost:8080/api/sdr/tune  -XPOST -D'{"id" : "radio1", "center_hz" : 433000000, "width_hz" : 2048000}'
-```
-
-##### Receivers
-
-Add a scanner:
-```sh
-curl  -f -v http://localhost:8080/api/rx/  -XPOST -d'{"user_name": "my_scanner", "type_name" : "scan"}'
-```
-
-Stream scan data:
-```sh
-curl -v http://localhost:8080/api/rx/my_scanner
-```
-
-Delete it:
-```sh
-curl  -f -v http://localhost:8080/api/rx/my_scanner  -XDELETE
-```
-

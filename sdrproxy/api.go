@@ -17,6 +17,8 @@ type RxRequest struct {
 	Name string `json:"name"`
 	// Radio is the unique identifier for some radio on the system.
 	Radio string `json:"radio"`
+	// HintTuneHz is the frequency for tuning the SDR, if possible.
+	HintTuneHz uint64 `json:"hint_tune_hz"`
 }
 
 type RxResponse struct {

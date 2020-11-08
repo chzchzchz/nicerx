@@ -67,6 +67,7 @@ func (s *Server) openMuxReader(req sdrproxy.RxRequest) (*radio.MixerIQReader, er
 		s.removeSignal(req.Name)
 		return nil, err
 	}
+	log.Println("reusing sdr for new mux")
 	return sdr.Reader(), nil
 }
 
@@ -86,8 +87,11 @@ func (s *Server) openSDR(req sdrproxy.RxRequest) (radio.SDR, error) {
 	}
 
 	sdrBand := req.HzBand
-	// TODO: tune to max bandwidth?
-	sdrBand.Width = uint64(getSampleRate(uint32(sdrBand.Width)))
+	if req.HintTuneHz != 0 {
+		sdrBand = radio.HzBand{Center: req.HintTuneHz, Width: 2048000}
+	} else {
+		sdrBand.Width = uint64(getSampleRate(uint32(sdrBand.Width)))
+	}
 	if err = sdr.SetBand(sdrBand); err != nil {
 		sdr.Close()
 		s.rwmu.Lock()
