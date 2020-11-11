@@ -11,10 +11,6 @@ import (
 	"github.com/chzchzchz/nicerx/radio"
 )
 
-var rootCmd = &cobra.Command{
-	Use:   "iqpipe",
-	Short: "A tool to pipe around IQ modulation.",
-}
 var (
 	centerHz    uint64
 	sampleHz    uint32
@@ -26,6 +22,11 @@ var (
 	imageWidth  int
 	pcmHz       uint
 )
+
+var rootCmd = &cobra.Command{
+	Use:   "iqpipe",
+	Short: "A tool to pipe around IQ modulation.",
+}
 
 func init() {
 	downmixCmd := &cobra.Command{

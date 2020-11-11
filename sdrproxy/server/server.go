@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"log"
 	"sync"
 
 	"github.com/chzchzchz/nicerx/radio"
@@ -43,32 +42,28 @@ func (s *Server) OpenSignal(ctx context.Context, req sdrproxy.RxRequest) (sig *S
 		return nil, err
 	}
 
-	log.Printf("opening mux reader for %+v", req)
-	r, err := s.openMuxReader(req)
+	r, sdr, err := s.openMuxReader(req)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Println("get new signal", req.HzBand)
 	sig.sigc = newSignalChannel(cctx, req.HzBand, r)
 	dataFormat := radio.SDRFormat{
 		BitDepth:   8, //info.BitDepth,
 		CenterHz:   req.HzBand.Center,
 		SampleRate: uint32(req.HzBand.Width),
 	}
-	log.Println("got new signal", req.HzBand)
-	sig.resp = sdrproxy.RxResponse{Format: dataFormat /*, Radio: sdr.Info()*/}
+	sig.resp = sdrproxy.RxResponse{Format: dataFormat, Radio: sdr.Info()}
 	return sig, nil
 }
 
-func (s *Server) openMuxReader(req sdrproxy.RxRequest) (*radio.MixerIQReader, error) {
+func (s *Server) openMuxReader(req sdrproxy.RxRequest) (*radio.MixerIQReader, radio.SDR, error) {
 	sdr, err := s.openSDR(req)
 	if err != nil {
 		s.removeSignal(req.Name)
-		return nil, err
+		return nil, nil, err
 	}
-	log.Println("reusing sdr for new mux")
-	return sdr.Reader(), nil
+	return sdr.Reader(), sdr, nil
 }
 
 func (s *Server) openSDR(req sdrproxy.RxRequest) (radio.SDR, error) {

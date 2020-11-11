@@ -44,7 +44,9 @@ func newSignalChannel(ctx context.Context, req radio.HzBand, iqr *radio.MixerIQR
 
 func (s *Signal) Response() sdrproxy.RxResponse { return s.resp }
 
-func (s *Signal) Chan() SignalChannel { return s.sigc }
+func (s *Signal) Chan() SignalChannel {
+	return s.sigc
+}
 
 func (s *Signal) stop() error {
 	s.cancel()
