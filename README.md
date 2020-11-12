@@ -34,16 +34,16 @@ sdrproxy --bind localhost:12000
 
 Read a radio stream:
 ```sh
-curl -v localhost:12000/api/rx/ -d'{"center_hz" : 100330000, "width_hz" : 15000, "radio" : "3e78268d"}' -o out.dat
+curl -v localhost:12000/api/rx/ -d'{"center_hz" : 100000000, "width_hz" : 15000, "radio" : "123"}' -o out.dat
 ```
 
 Read a radio stream with hinting to bind SDR to wider bandwidth:
 ```sh
-curl -N -v localhost:12000/api/rx/ -d'{"hint_tune_hz" : 100800000, "center_hz" : 1009612000, "width_hz" : 30000, "radio" : "20000001"}' -o ~/radio.fifo
+curl -N -v localhost:12000/api/rx/ -d'{"hint_tune_hz" : 100000000, "center_hz" : 1009612000, "width_hz" : 30000, "radio" : "123"}' -o ~/radio.fifo
 
 ```
 
-Current sdrs on system:
+Current SDRs on system:
 ```sh
 curl -v localhost:12000/api/sdr/
 ```
@@ -51,14 +51,14 @@ curl -v localhost:12000/api/sdr/
 ## iqscope
 
 ```sh
-curl -N -v localhost:12000/api/rx/ -d'{"name" : "ffplay", "hint_tune_hz" : 929800000, "center_hz" : 929800000, "width_hz" : 1024000, "radio" : "90000001"}' -o - | ./iqscope fft -s 10240000 -w 480 -r 320 -
+curl -N -v localhost:12000/api/rx/ -d'{"name" : "iqscope", "hint_tune_hz" : 100000000, "center_hz" : 100000000, "width_hz" : 1024000, "radio" : "123"}' -o - | ./iqscope fft -c 100000000 -s 1024000 -R -w 1024 -r 600 -
 ```
 
 ## Examples
 
-Open a radio stream and display spectrum with ffmpeg (kind of slow, use for sanity checking):
+Open a radio stream and display spectrum with ffmpeg (super slow, use for sanity checking):
 ```sh
-curl -N -v localhost:12000/api/rx/ -d'{"name" : "ffplay", "hint_tune_hz" : 100800000, "center_hz" : 100800000, "width_hz" : 1024000, "radio" : "90000001"}' -o - |  \
+curl -N -v localhost:12000/api/rx/ -d'{"name" : "ffplay", "hint_tune_hz" : 100000000, "center_hz" : 100000000, "width_hz" : 1024000, "radio" : "123"}' -o - |  \
 ffmpeg -f u8 -ar 1024000 -ac 2 -i - \
         -lavfi showspectrum="s=1024x480:mode=combined:color=rainbow:overlap=1:slide=scroll:orientation=horizontal" -an -f avi - | \
 ffplay -

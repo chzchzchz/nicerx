@@ -89,9 +89,7 @@ func (s *Server) openSDR(req sdrproxy.RxRequest) (radio.SDR, error) {
 	}
 	if err = sdr.SetBand(sdrBand); err != nil {
 		sdr.Close()
-		s.rwmu.Lock()
 		delete(s.sdrs, req.Radio)
-		s.rwmu.Unlock()
 		return nil, err
 	}
 	return sdr, nil
@@ -99,11 +97,11 @@ func (s *Server) openSDR(req sdrproxy.RxRequest) (radio.SDR, error) {
 
 func (s *Server) Close() {
 	s.rwmu.Lock()
+	defer s.rwmu.Unlock()
 	for _, sdr := range s.sdrs {
 		sdr.Close()
 	}
 	s.sdrs = make(map[string]radio.SDR)
-	s.rwmu.Unlock()
 	return
 }
 
@@ -119,16 +117,15 @@ func (s *Server) removeSignal(name string) {
 
 func (s *Server) closeSDR(name string) {
 	s.rwmu.Lock()
+	defer s.rwmu.Unlock()
 	for _, sig := range s.signals {
 		if sig.req.Radio == name {
-			s.rwmu.Unlock()
 			return
 		}
 	}
 	// No signals reference SDR; may close.
 	s.sdrs[name].Close()
 	delete(s.sdrs, name)
-	s.rwmu.Unlock()
 }
 
 func (s *Server) Signals() (ret []sdrproxy.RxSignal) {

@@ -23,6 +23,7 @@ func (rxh *rxHandler) handlePost(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	log.Printf("[%s] requesting stream %v", r.RemoteAddr, *req)
 	s, err := rxh.serv.OpenSignal(r.Context(), *req)
 	if err != nil {
 		return err
@@ -42,7 +43,7 @@ func (rxh *rxHandler) handlePost(w http.ResponseWriter, r *http.Request) error {
 
 	// Stream out data.
 	iqw := radio.NewIQWriter(w)
-	log.Printf("stream %+v for %s", s.Response(), r.RemoteAddr)
+	log.Printf("[%s] opened stream %+v", r.RemoteAddr, s.Response())
 	for sig := range s.Chan() {
 		if err = iqw.Write64(sig); err != nil {
 			log.Printf("sigc error: %v", err)
