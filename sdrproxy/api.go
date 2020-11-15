@@ -19,6 +19,8 @@ type RxRequest struct {
 	Radio string `json:"radio"`
 	// HintTuneHz is the frequency for tuning the SDR, if possible.
 	HintTuneHz uint64 `json:"hint_tune_hz"`
+	// HintTuneBw is the samples for the SDR, if possible.
+	HintTuneWidthHz uint64 `json:"hint_width_hz"`
 }
 
 type RxResponse struct {

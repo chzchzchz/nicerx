@@ -1,3 +1,7 @@
-*jpg
-*pcm
-*db
+*.jpg
+*.pcm
+*.db
+*.out
+iqpipe
+iqscope
+sdrproxy

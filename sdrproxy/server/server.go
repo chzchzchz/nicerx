@@ -83,7 +83,11 @@ func (s *Server) openSDR(req sdrproxy.RxRequest) (radio.SDR, error) {
 
 	sdrBand := req.HzBand
 	if req.HintTuneHz != 0 {
-		sdrBand = radio.HzBand{Center: req.HintTuneHz, Width: 2048000}
+		w := uint64(2048000)
+		if req.HintTuneWidthHz != 0 {
+			w = req.HintTuneWidthHz
+		}
+		sdrBand = radio.HzBand{Center: req.HintTuneHz, Width: w}
 	} else {
 		sdrBand.Width = uint64(getSampleRate(uint32(sdrBand.Width)))
 	}
