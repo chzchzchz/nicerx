@@ -87,7 +87,7 @@ func WriteSpectrogramFile(infn, outfn string, bins int) error {
 	y := 0
 	for fft := range SpectrogramChan(iqr, bins) {
 		for x, v := range fft {
-			img.SetNRGBA(x, y, FFTBin2Color(v * v))
+			img.SetNRGBA(x, y, FFTBin2Color(v*v))
 		}
 		y++
 	}

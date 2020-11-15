@@ -17,17 +17,17 @@ type rxHandler struct {
 
 func streamJSON(rxs *receiver.RxStream) error {
 	/*
-	enc := json.NewEncoder(w)
-	for v := range rs.Chan() {
-		if err := enc.Encode(v); err != nil {
-			return err
+		enc := json.NewEncoder(w)
+		for v := range rs.Chan() {
+			if err := enc.Encode(v); err != nil {
+				return err
+			}
+			if _, err := w.Write([]byte{'\n'}); err != nil {
+				return err
+			}
+			w.(http.Flusher).Flush()
 		}
-		if _, err := w.Write([]byte{'\n'}); err != nil {
-			return err
-		}
-		w.(http.Flusher).Flush()
-	}
-	return rs.Err()
+		return rs.Err()
 	*/
 	panic("STUB")
 }

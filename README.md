@@ -10,7 +10,7 @@ Libraries:
 * [fftw3](https://www.fftw.org)
 * [liquid-dsp](https://github.com/jgaeddert/liquid-dsp)
 * [rtl\_tcp](https://osmocom.org/projects/rtl-sdr/wiki)
-* sdl (for scope)
+* [sdl](https://libsdl.org) (for scope)
 
 ### Compile from sources
 
@@ -32,6 +32,11 @@ sdrproxy --bind localhost:12000
 
 ### API
 
+View SDRs on system:
+```sh
+curl -v localhost:12000/api/sdr/
+```
+
 Read a radio stream:
 ```sh
 curl -v localhost:12000/api/rx/ -d'{"center_hz" : 100000000, "width_hz" : 15000, "radio" : "123"}' -o out.dat
@@ -39,22 +44,23 @@ curl -v localhost:12000/api/rx/ -d'{"center_hz" : 100000000, "width_hz" : 15000,
 
 Read a radio stream with hinting to bind SDR to wider bandwidth:
 ```sh
-curl -N -v localhost:12000/api/rx/ -d'{"hint_tune_hz" : 100000000, "center_hz" : 1009612000, "width_hz" : 30000, "radio" : "123"}' -o ~/radio.fifo
+curl -N -v localhost:12000/api/rx/ -d'{"hint_tune_hz" : 100000000, "center_hz" : 1009612000, "width_hz" : 30000, "radio" : "123"}' -o out.dat
 
 ```
 
-Current SDRs on system:
+## iqpipe
+
+FM demodulate a pager signal:
 ```sh
-curl -v localhost:12000/api/sdr/
+curl ... -o - | cmd/iqpipe/iqpipe fmdemod - - -s 30000 -p 22050 -d 9600 | multimon-ng -
 ```
 
 ## iqscope
 
+Stream sdrproxy channel to waterfall:
 ```sh
 curl -N -v localhost:12000/api/rx/ -d'{"name" : "iqscope", "hint_tune_hz" : 100000000, "center_hz" : 100000000, "width_hz" : 1024000, "radio" : "123"}' -o - | ./iqscope fft -c 100000000 -s 1024000 -R -w 1024 -r 600 -
 ```
-
-## Examples
 
 Open a radio stream and display spectrum with ffmpeg (super slow, use for sanity checking):
 ```sh

@@ -43,7 +43,7 @@ func (ss *SignalStore) HasBand(fb radio.FreqBand) bool {
 
 type SignalDir struct {
 	CenterMHz float64
-	Path string
+	Path      string
 }
 
 func (ss *SignalStore) overlapDirs(fb radio.FreqBand) (ret []SignalDir) {
