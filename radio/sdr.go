@@ -23,6 +23,10 @@ type SDRFormat struct {
 	SampleRate uint32 `json:"sample_rate"`
 }
 
+func (s *SDRFormat) HzBand() HzBand {
+	return HzBand{Center: s.CenterHz, Width: uint64(s.SampleRate)}
+}
+
 type SDRHWInfo struct {
 	Id string `json:"id"`
 

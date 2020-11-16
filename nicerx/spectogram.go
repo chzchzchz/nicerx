@@ -41,12 +41,17 @@ func SpectrogramChan(iqr *radio.IQReader, bins int) <-chan []float64 {
 	outc := make(chan []float64, 2)
 	go func() {
 		defer close(outc)
-		arr := &fftw32.Array{}
+		in, out := fftw32.NewArray(bins), fftw32.NewArray(bins)
+		plan := fftw32.NewPlan(in, out, fftw32.Forward, fftw32.DefaultFlag)
+		defer plan.Destroy()
+
 		for samps := range iqr.Batch64(bins, 0) {
-			arr.Elems = samps
+			copy(in.Elems, samps)
+			plan.Execute()
+
 			fft := make([]float64, len(samps))
 			min, max := 0.0, 0.0
-			for i, v := range fftw32.FFT(arr).Elems {
+			for i, v := range out.Elems {
 				fft[i] = cmplx.Abs(complex128(v))
 				if fft[i] < min {
 					min = fft[i]
