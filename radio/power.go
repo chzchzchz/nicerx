@@ -4,6 +4,7 @@ import (
 	"io"
 	"math"
 	"math/cmplx"
+	"runtime"
 	"sort"
 
 	"github.com/runningwild/go-fftw/fftw32"
@@ -14,9 +15,11 @@ type SpectralPower struct {
 	max     []float64
 	avg     []float64
 	med     []float64
+	in      *fftw32.Array
 	fftBins *fftw32.Array
 	ffts    int
 	band    FreqBand
+	plan    *fftw32.Plan
 }
 
 type binBand struct {
@@ -26,10 +29,16 @@ type binBand struct {
 }
 
 func NewSpectralPower(band FreqBand, bins, ffts int) *SpectralPower {
+	// Plans bind pointers forever, so need to copy into 'in' later.
+	in, out := fftw32.NewArray(bins), fftw32.NewArray(bins)
+	plan := fftw32.NewPlan(in, out, fftw32.Forward, fftw32.DefaultFlag)
+	runtime.SetFinalizer(plan, func(p *fftw32.Plan) { p.Destroy() })
 	return &SpectralPower{
-		fftBins: fftw32.NewArray(bins),
+		in:      in,
+		fftBins: out,
 		ffts:    ffts,
 		band:    band,
+		plan:    plan,
 	}
 }
 
@@ -137,14 +146,14 @@ func (sp *SpectralPower) Measure(ch <-chan []complex64) error {
 	for i := range meds {
 		meds[i] = make([]float64, medSamples)
 	}
-	arr := &fftw32.Array{}
+
 	for n := 0; n < sp.ffts; n++ {
 		samps, ok := <-ch
 		if !ok {
 			return io.EOF
 		}
-		arr.Elems = samps
-		sp.fftBins = fftw32.FFT(arr)
+		copy(sp.in.Elems, samps)
+		sp.plan.Execute()
 		for i, v := range sp.fftBins.Elems {
 			idx := i + len(sp.fftBins.Elems)/2
 			if i >= len(sp.fftBins.Elems)/2 {

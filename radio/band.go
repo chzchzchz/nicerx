@@ -2,6 +2,7 @@ package radio
 
 import (
 	"math"
+	"sort"
 )
 
 type HzBand struct {
@@ -47,24 +48,24 @@ func (fb1 *FreqBand) Overlaps(fb2 FreqBand) bool {
 	return !(fb2.EndMHz() < fb1.BeginMHz() || fb2.BeginMHz() > fb1.EndMHz())
 }
 
-func BandMerge(fb1 []FreqBand) (ret []FreqBand) {
-	anyMerge := false
-	for i := range fb1 {
-		merged := false
-		for j := range ret {
-			if fb1[i].Overlaps(ret[j]) {
-				ret[j].merge(fb1[i])
-				merged = true
-			}
-		}
-		if !merged {
-			ret = append(ret, fb1[i])
-		} else {
-			anyMerge = true
-		}
+type Bands []FreqBand
+
+func (a Bands) Len() int           { return len(a) }
+func (a Bands) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a Bands) Less(i, j int) bool { return a[i].BeginMHz() < a[j].BeginMHz() }
+
+func BandMerge(fbs []FreqBand) (ret []FreqBand) {
+	if len(fbs) == 0 {
+		return nil
 	}
-	if anyMerge {
-		return BandMerge(ret)
+	sort.Sort(Bands(fbs))
+	ret = append(ret, fbs[0])
+	for _, fb := range fbs[1:] {
+		if fb.BeginMHz() > ret[len(ret)-1].EndMHz() {
+			ret = append(ret, fb)
+		} else {
+			ret[len(ret)-1].merge(fb)
+		}
 	}
 	return ret
 }
