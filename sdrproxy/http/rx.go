@@ -23,7 +23,6 @@ func (rxh *rxHandler) handlePost(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	log.Printf("[%s] requesting stream %v", r.RemoteAddr, *req)
 	s, err := rxh.serv.OpenSignal(r.Context(), *req)
 	if err != nil {
 		return err
@@ -65,6 +64,8 @@ func (rxh *rxHandler) handleGet(w http.ResponseWriter, r *http.Request) error {
 
 func (rxh *rxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
+
+	log.Printf("[%s] request %s %s %+v\n\n", r.RemoteAddr, r.Method, r.URL.String(), r)
 	switch r.Method {
 	case http.MethodPost:
 		err = rxh.handlePost(w, r)
@@ -74,6 +75,7 @@ func (rxh *rxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 	if err != nil {
+		log.Printf("[%s] failed %s %s", r.RemoteAddr, err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
