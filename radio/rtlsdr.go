@@ -16,10 +16,12 @@ import (
 	"github.com/kr/pty"
 )
 
-var minFreqHz = uint32(25000000)
+var minFreqHz = uint32(50000)
 var maxFreqHz = uint32(1750000000)
 var minRate = uint32(225000)
 var maxRate = uint32(3200000)
+
+const directSampMaxHz = 25000000
 
 type rtlSDR struct {
 	sdr    *RTLTCPSDR
@@ -128,8 +130,11 @@ func (s *rtlSDR) SetBand(b HzBand) error {
 				return err
 			}
 		}
-		if err := Calibrate(s); err != nil {
-			return err
+		// Don't calibrate with NOAA if wired to HF antenna.
+		if b.Center > directSampMaxHz {
+			if err := Calibrate(s); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -234,6 +239,25 @@ func (s *rtlSDR) SetCenterFreq(cent uint32) error {
 func (s *rtlSDR) setCenterFreq(cent uint32) error {
 	if cent < minFreqHz || cent > maxFreqHz {
 		return ErrFrequencyOutOfRange
+	}
+	if cent < directSampMaxHz {
+		if s.lastCenter == 0 || s.lastCenter >= directSampMaxHz {
+			if err := s.sdr.SetDirectSampling(2); err != nil {
+				return err
+			}
+		}
+		if err := s.sdr.SetGainMode(true); err != nil {
+			return err
+		}
+		if err := s.sdr.SetGainByIndex(28); err != nil {
+			return err
+		}
+	} else {
+		if s.lastCenter == 0 || s.lastCenter < directSampMaxHz {
+			if err := s.sdr.SetDirectSampling(0); err != nil {
+				return err
+			}
+		}
 	}
 	if s.lastCenter != cent {
 		if err := s.sdr.SetCenterFreq(cent); err != nil {
