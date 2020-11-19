@@ -109,9 +109,10 @@ func fftCmd(args []string) {
 				panic("could not find sdr")
 			}
 		} else {
+			name := fmt.Sprintf("spectrogram-%s-%d", sdrDevice, centerHz)
 			req := sdrproxy.RxRequest{
 				HzBand: radio.HzBand{Center: centerHz, Width: sampleHz},
-				Name:   "spectrogram-" + sdrDevice,
+				Name:   name,
 				Radio:  sdrDevice,
 			}
 			f, err := c.OpenIQReader(cctx, req)
@@ -179,6 +180,9 @@ func fftCmd(args []string) {
 	// Cope with too much data by dropping frames.
 	// This will work even if the sample rate is totally wrong.
 	fps := float64(30)
+	if maxfps := float64(sampleHz) / float64(winWidth); maxfps < fps {
+		fps = maxfps
+	}
 	framec := make(chan []float64, int(4*fps))
 	go func() {
 		defer close(framec)
