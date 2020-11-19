@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-var testRadioSerial = "0"
+var testRadioSerial = "20000001"
 
 func TestSampleRate(t *testing.T) {
 	// Rate must divide crystal 28.8MHz (5^5*3^2*2^10) to avoid resampling.

@@ -17,6 +17,10 @@ func (hzb HzBand) ToMHz() FreqBand {
 	}
 }
 
+func (hzb HzBand) Overlaps(hz2 HzBand) bool {
+	return hzb.ToMHz().Overlaps(hz2.ToMHz())
+}
+
 // TODO: replace with HzBand
 type FreqBand struct {
 	Center float64
@@ -44,7 +48,7 @@ func (fb1 *FreqBand) merge(fb2 FreqBand) {
 	fb1.Width = end - begin
 }
 
-func (fb1 *FreqBand) Overlaps(fb2 FreqBand) bool {
+func (fb1 FreqBand) Overlaps(fb2 FreqBand) bool {
 	return !(fb2.EndMHz() < fb1.BeginMHz() || fb2.BeginMHz() > fb1.EndMHz())
 }
 

@@ -3,7 +3,7 @@ package radio
 import (
 	"context"
 	"errors"
-	"fmt"
+	"log"
 )
 
 var ErrRateOutOfRange = errors.New("sample rate out of range")
@@ -44,7 +44,7 @@ func Calibrate(s SDR) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println("measured ppm", ppm)
+		log.Println("measured ppm", ppm)
 		if ppm < 1.0 {
 			break
 		}
@@ -55,7 +55,7 @@ func Calibrate(s SDR) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println("new ppm", ppm)
+		log.Println("new ppm", ppm)
 		if ppm < 2.0 {
 			break
 		} else if err := s.SetFreqCorrection(0); err != nil {

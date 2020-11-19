@@ -130,6 +130,7 @@ func fftCmd(args []string) {
 		log.Println("failed reading first fft")
 		return
 	}
+	log.Println("got first fft")
 
 	winFlags := uint32(sdl.WINDOW_SHOWN)
 	if resizable {

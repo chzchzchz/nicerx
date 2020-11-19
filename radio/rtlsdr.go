@@ -56,13 +56,42 @@ func newRTLSDR(ctx context.Context, ser string) (*rtlSDR, error) {
 	if err != nil {
 		return nil, err
 	}
-	go io.Copy(os.Stdout, fpty)
-	// TODO: would like to wait for 'listening...' but need tty to line-buffer
+
+	// Wait for sdr to set up.
+	readyc := make(chan error, 1)
+	go func() {
+		defer close(readyc)
+		br := bufio.NewReader(fpty)
+		for {
+			l, err := br.ReadString('\n')
+			if err != nil {
+				readyc <- err
+				return
+			}
+			if strings.Contains(l, "listening...") {
+				return
+			}
+		}
+	}()
+
 	select {
-	case <-time.After(time.Second):
+	case <-time.After(2 * time.Second):
+		// Should take <1s to set up.
+		cancel()
+		<-readyc
+		return nil, io.EOF
 	case <-cctx.Done():
+		cancel()
+		<-readyc
 		return nil, cctx.Err()
+	case err := <-readyc:
+		if err != nil {
+			return nil, err
+		}
 	}
+
+	go io.Copy(os.Stdout, fpty)
+
 	return &rtlSDR{
 		fpty:         fpty,
 		ctx:          cctx,

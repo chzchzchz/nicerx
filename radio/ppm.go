@@ -6,9 +6,12 @@ import (
 
 const ppmSampleRate = 2048000
 const ppmBuckets = 8192
+const ppmFFTsPerSecond = ppmSampleRate / ppmBuckets
 const ppmBucketMHz = ppmSampleRate / ppmBuckets / 1.0e6
 const ppmCenterMHz = 162.0
-const ppmFFTs = 100
+
+// Collect 250ms of data.
+const ppmFFTs = ppmFFTsPerSecond / 4
 
 func FindPPM(sdr SDR) (float64, error) {
 	b := HzBand{Center: ppmCenterMHz * 1e6, Width: ppmSampleRate}

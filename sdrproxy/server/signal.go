@@ -18,9 +18,14 @@ type Signal struct {
 	serv   *Server
 	sigc   <-chan []complex64
 	cancel context.CancelFunc
+	readyc <-chan struct{}
 }
 
-func newSignalChannel(ctx context.Context, req radio.HzBand, iqr *radio.MixerIQReader) SignalChannel {
+func newSignalChannel(ctx context.Context, req radio.HzBand, iqr *radio.MixerIQReader) (SignalChannel, error) {
+	if !req.Overlaps(iqr.HzBand) {
+		return nil, sdrproxy.ErrOutOfRange
+	}
+
 	// Setup band by choosing rate and filters to get band via SDR bands.
 	processSignal := func(ch <-chan []complex64) <-chan []complex64 { return ch }
 	if iqr.Width != req.Width || iqr.Center != req.Center {
@@ -38,7 +43,7 @@ func newSignalChannel(ctx context.Context, req radio.HzBand, iqr *radio.MixerIQR
 		}
 	}
 	/* TODO: xlate filter to avoid DC bias */
-	return processSignal(iqr.BatchStream64(ctx, int(iqr.Width), 0))
+	return processSignal(iqr.BatchStream64(ctx, int(iqr.Width), 0)), nil
 }
 
 func (s *Signal) Response() sdrproxy.RxResponse { return s.resp }

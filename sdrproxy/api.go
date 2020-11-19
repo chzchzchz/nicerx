@@ -10,6 +10,7 @@ import (
 )
 
 var ErrSignalExists = errors.New("signal by that name exists")
+var ErrOutOfRange = errors.New("signal out of range for tuning")
 
 type RxRequest struct {
 	radio.HzBand
