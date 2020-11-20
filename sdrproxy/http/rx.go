@@ -49,6 +49,7 @@ func (rxh *rxHandler) handlePost(w http.ResponseWriter, r *http.Request) error {
 			break
 		}
 	}
+	log.Printf("[%s] closing %s", r.RemoteAddr, req.Name)
 	return nil
 }
 

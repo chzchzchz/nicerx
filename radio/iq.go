@@ -37,6 +37,10 @@ func NewIQReader(r io.Reader) *IQReader {
 	return &IQReader{r: r, chans: make(map[*iqChannel]struct{})}
 }
 
+func (iqr *IQReader) ToMixer(hzb HzBand) *MixerIQReader {
+	return &MixerIQReader{HzBand: hzb, IQReader: iqr}
+}
+
 func NewMixerIQReader(r io.Reader, hzb HzBand) *MixerIQReader {
 	return &MixerIQReader{
 		HzBand:   hzb,

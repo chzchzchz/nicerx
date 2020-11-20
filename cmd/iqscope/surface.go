@@ -90,6 +90,13 @@ func newFFTTexture(r *sdl.Renderer, w, h int) *fftTexture {
 	return ft
 }
 
+func (ft *fftTexture) Destroy() {
+	for _, r := range ft.rows {
+		r.Destroy()
+	}
+	ft.rows = nil
+}
+
 func (ft *fftTexture) blit() {
 	dstRect := &sdl.Rect{X: 0 /* Y set in loops */, W: int32(ft.w), H: 1}
 	for i := ft.rowIdx; i < len(ft.rows); i++ {

@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"log"
 
 	"github.com/chzchzchz/nicerx/dsp"
 	"github.com/chzchzchz/nicerx/radio"
@@ -29,8 +28,6 @@ func newSignalChannel(ctx context.Context, req radio.HzBand, iqr *radio.MixerIQR
 	// Setup band by choosing rate and filters to get band via SDR bands.
 	processSignal := func(ch <-chan []complex64) <-chan []complex64 { return ch }
 	if iqr.Width != req.Width || iqr.Center != req.Center {
-		log.Print("upsample to ", iqr.Width, " and downsample to ", req.Width)
-		log.Print("xlate to ", req.Center, " from input center ", iqr.Center)
 		processSignal = func(ch <-chan []complex64) <-chan []complex64 {
 			/* Oversampled; down mix translate, lowpass, downsample */
 			mixc := ch
@@ -47,7 +44,6 @@ func newSignalChannel(ctx context.Context, req radio.HzBand, iqr *radio.MixerIQR
 			return dsp.ResampleComplex64Ctx(ctx, resampleRatio, lpc)
 		}
 	}
-	/* TODO: xlate filter to avoid DC bias */
 	return processSignal(iqr.BatchStream64(ctx, int(iqr.Width), 0)), nil
 }
 

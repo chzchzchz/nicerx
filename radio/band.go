@@ -10,6 +10,14 @@ type HzBand struct {
 	Width  uint64 `json:"width_hz"`
 }
 
+func HzBandRange(lo, hi int64) HzBand {
+	w := hi - lo
+	if w < 0 {
+		return HzBandRange(hi, lo)
+	}
+	return HzBand{Center: uint64(lo + w/2), Width: uint64(w)}
+}
+
 func (hzb HzBand) ToMHz() FreqBand {
 	return FreqBand{
 		float64(hzb.Center) / 1e6,
