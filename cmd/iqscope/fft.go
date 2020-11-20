@@ -16,16 +16,22 @@ import (
 )
 
 type fftWindow struct {
-	win     *sdl.Window
-	r       *sdl.Renderer
-	w       int
-	h       int
-	pause   bool
-	ft      *fftTexture
+	win *sdl.Window
+	r   *sdl.Renderer
+	ft  *fftTexture
+	w   int
+	h   int
+
 	fftc    <-chan []float64
 	iqr     *radio.MixerIQReader
-	lines   []int32
 	iqrPath string
+
+	pause        bool
+	lines        []int32
+	silentCenter bool
+
+	wcancel context.CancelFunc
+	wdonec  <-chan struct{}
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -109,6 +115,9 @@ func NewFFTWindow(iqr *radio.MixerIQReader, w, h int) (fw *fftWindow, err error)
 
 func (fw *fftWindow) Close() {
 	fw.cancel()
+	if fw.wcancel != nil {
+		fw.wcancel()
+	}
 	fw.ft.Destroy()
 	fw.r.Destroy()
 	fw.win.Destroy()
@@ -208,7 +217,7 @@ func (fw *fftWindow) handleEvent(event sdl.Event) bool {
 	case *sdl.MouseMotionEvent:
 		cursorMHz := float64(fw.x2hz(ev.X)) / 1.0e6
 		mhz := fw.iqr.ToMHz()
-		if fw.pause {
+		if !fw.silentCenter {
 			log.Printf("center: %0.7gMHz of [%g,%g]", cursorMHz, mhz.BeginMHz(), mhz.EndMHz())
 		}
 	case *sdl.WindowEvent:
@@ -223,6 +232,8 @@ func (fw *fftWindow) handleEvent(event sdl.Event) bool {
 				fw.pause = !fw.pause
 			case sdl.K_l:
 				fw.launchWindow()
+			case sdl.K_s:
+				fw.silentCenter = !fw.silentCenter
 			case sdl.K_r:
 				fw.win.SetSize(int32(fw.w), int32(fw.h))
 			}
@@ -230,11 +241,48 @@ func (fw *fftWindow) handleEvent(event sdl.Event) bool {
 			switch ev.Keysym.Sym {
 			case sdl.K_ESCAPE:
 				return false
+			case sdl.K_w:
+				fw.toggleWrite()
 			}
 		}
 
 	}
 	return true
+}
+
+func (fw *fftWindow) toggleWrite() {
+	path := fmt.Sprintf("%d[%d].iq8", fw.iqr.Center, fw.iqr.Width)
+	if fw.wdonec != nil {
+		log.Println("stop writing", path)
+		fw.wcancel()
+		<-fw.wdonec
+		fw.wdonec = nil
+		return
+	}
+
+	wdonec := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	fw.wdonec, fw.wcancel = wdonec, cancel
+	fw.wg.Add(1)
+	go func() {
+		defer fw.wg.Done()
+		defer close(wdonec)
+		log.Println("start writing", path)
+		f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
+		if err != nil {
+			log.Println("failed to open", path, err)
+			return
+		}
+		defer f.Close()
+		iqw := radio.NewIQWriter(f)
+		sampc := fw.iqr.BatchStream64(ctx, fw.w, 0)
+		for samps := range sampc {
+			if err := iqw.Write64(samps); err != nil {
+				log.Println("failed to write", path, err)
+				return
+			}
+		}
+	}()
 }
 
 func (fw *fftWindow) launchWindow() {

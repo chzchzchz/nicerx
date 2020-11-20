@@ -2,6 +2,7 @@
 *.pcm
 *.db
 *.out
+*.iq8
 cmd/iqpipe/iqpipe
 cmd/iqscope/iqscope
 cmd/sdrproxy/sdrproxy
