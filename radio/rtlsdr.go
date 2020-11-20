@@ -257,6 +257,12 @@ func (s *rtlSDR) setCenterFreq(cent uint32) error {
 			if err := s.sdr.SetDirectSampling(0); err != nil {
 				return err
 			}
+			if err := s.sdr.SetGainMode(true); err != nil {
+				return err
+			}
+			if err := s.sdr.SetGainByIndex(28); err != nil {
+				return err
+			}
 		}
 	}
 	if s.lastCenter != cent {
