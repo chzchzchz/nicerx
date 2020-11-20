@@ -37,8 +37,13 @@ func newSignalChannel(ctx context.Context, req radio.HzBand, iqr *radio.MixerIQR
 			if iqr.Center != req.Center {
 				mixc = dsp.MixDownCtx(ctx, float64(req.Center)-float64(iqr.Center), int(iqr.Width), ch)
 			}
-			lpc := dsp.LowpassCtx(ctx, float64(req.Width), int(iqr.Width), 1, mixc)
-			resampleRatio := float32(req.Width) / float32(iqr.Width)
+
+			dec := 1
+			for iqr.Width > uint64(dec)*4*req.Width {
+				dec *= 2
+			}
+			lpc := dsp.LowpassCtx(ctx, float64(req.Width), int(iqr.Width), dec, mixc)
+			resampleRatio := float32(req.Width) / (float32(iqr.Width) / float32(dec))
 			return dsp.ResampleComplex64Ctx(ctx, resampleRatio, lpc)
 		}
 	}
