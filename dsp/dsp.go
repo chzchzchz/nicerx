@@ -8,15 +8,9 @@ static void firfilt_crcf_block(
 	complex float *in, complex float *out,
 	unsigned n, unsigned dec)
 {
-	// remove DC bias by subtracting mean
-	complex double mean = 0.0;
-	// for (unsigned i = 0; i < n; i++)
-	// 	mean += in[i];
-	// mean /= (double)n;
-
 	unsigned j = 0, k = 0;
 	for (unsigned i = 0; i < n; i++) {
-		firfilt_crcf_push(q, in[i] - mean);
+		firfilt_crcf_push(q, in[i]);
 		k++;
 		firfilt_crcf_execute(q, &out[j]);
 		if (k == dec) {
@@ -25,6 +19,17 @@ static void firfilt_crcf_block(
 		}
 	}
 }
+
+static void iirfilt_crcf_block(
+	iirfilt_crcf q,
+	complex float *in, complex float *out,
+	unsigned n)
+{
+	for (unsigned i = 0; i < n; i++) {
+		iirfilt_crcf_execute(q, in[i], &out[i]);
+	}
+}
+
 */
 import "C"
 
@@ -131,7 +136,7 @@ func ResampleComplex64Ctx(ctx context.Context, r float32, sigc <-chan []complex6
 			C.resamp_crcf_destroy(q)
 		}()
 		for samps := range sigc {
-			outsamp := make([]complex64, int(math.Ceil(float64(r)*float64(len(samps)))))
+			outsamp := make([]complex64, int(math.Ceil(float64(r+1.0)*float64(len(samps)))))
 			var outlen uint
 			C.resamp_crcf_execute_block(q,
 				(*C.complexfloat)(unsafe.Pointer(&samps[0])),
@@ -190,6 +195,30 @@ func DemodFM(h float32, sigc <-chan []complex64) <-chan []float32 {
 				C.uint(len(samps)),
 				(*C.float)(unsafe.Pointer(&outsamp[0])))
 			outc <- outsamp
+		}
+	}()
+	return outc
+}
+
+func DCBlockerCtx(ctx context.Context, sigc <-chan []complex64) <-chan []complex64 {
+	q := C.iirfilt_crcf_create_dc_blocker(C.float(0.1))
+	outc := make(chan []complex64, 1)
+	go func() {
+		defer func() {
+			C.iirfilt_crcf_destroy(q)
+			close(outc)
+		}()
+		for samp := range sigc {
+			outsamp := make([]complex64, len(samp))
+			C.iirfilt_crcf_block(q,
+				(*C.complexfloat)(unsafe.Pointer(&samp[0])),
+				(*C.complexfloat)(unsafe.Pointer(&outsamp[0])),
+				C.uint(len(samp)))
+			select {
+			case outc <- outsamp:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 	return outc
