@@ -1,6 +1,10 @@
 package main
 
 import (
+	"image"
+	"image/color"
+	"unsafe"
+
 	"github.com/veandco/go-sdl2/sdl"
 
 	"github.com/chzchzchz/nicerx/nicerx"
@@ -111,6 +115,26 @@ func (ft *fftTexture) blit() {
 		}
 		dstRect.Y++
 	}
+}
+
+func (ft *fftTexture) blitImage() image.Image {
+	h := len(ft.rows)
+	p := make([]byte, ft.w*4*h)
+	pixels := unsafe.Pointer(&p[0])
+	pitch := ft.w * 4
+	if err := ft.r.ReadPixels(nil, sdl.PIXELFORMAT_RGB888, pixels, pitch); err != nil {
+		panic(err)
+	}
+	img := image.NewNRGBA(image.Rect(0, 0, ft.w, h))
+	for y := 0; y < h; y++ {
+		r := y * pitch
+		for x := 0; x < ft.w; x++ {
+			r, g, b := p[r+4*x], p[r+4*x+1], p[r+4*x+2]
+			img.SetNRGBA(x, y, color.NRGBA{r, g, b, 0xff})
+		}
+	}
+	return img
+
 }
 
 func (ft *fftTexture) add(row []float64) {

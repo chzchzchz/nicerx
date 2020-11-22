@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"image/jpeg"
 	"log"
 	"os"
 	"os/exec"
@@ -22,13 +23,13 @@ type fftWindow struct {
 	w   int
 	h   int
 
-	fftc    <-chan []float64
+	sampc   <-chan []complex64
 	iqr     *radio.MixerIQReader
 	iqrPath string
 
-	pause        bool
-	lines        []int32
-	silentCenter bool
+	pause      bool
+	lines      []int32
+	muteCenter bool
 
 	wcancel context.CancelFunc
 	wdonec  <-chan struct{}
@@ -39,12 +40,12 @@ type fftWindow struct {
 }
 
 func NewFFTWindow(iqr *radio.MixerIQReader, w, h int) (fw *fftWindow, err error) {
-	fftc := nicerx.SpectrogramChan(iqr.IQReader, w)
-	log.Println("waiting for first fft")
-	if row0 := <-fftc; row0 == nil {
-		return nil, fmt.Errorf("failed reading first fft")
+	sampc := iqr.Batch64(w, 0)
+	log.Println("waiting for first row")
+	if row0 := <-sampc; row0 == nil {
+		return nil, fmt.Errorf("failed reading first row of samples")
 	}
-	log.Println("got first fft")
+	log.Println("got first samples")
 
 	winFlags := uint32(sdl.WINDOW_SHOWN)
 	if resizable {
@@ -106,7 +107,7 @@ func NewFFTWindow(iqr *radio.MixerIQReader, w, h int) (fw *fftWindow, err error)
 		h:      h,
 		pause:  false,
 		ft:     newFFTTexture(r, w, h),
-		fftc:   fftc,
+		sampc:  sampc,
 		iqr:    iqr,
 		ctx:    ctx,
 		cancel: cancel,
@@ -141,22 +142,29 @@ func (fw *fftWindow) redraw() {
 }
 
 func (fw *fftWindow) Run() {
-	// Cope with too much data by dropping frames.
+	// Cope with too much data by dropping rows to render.
 	// This will work even if the sample rate is totally wrong.
 	fps := float64(30)
 	if maxfps := float64(fw.iqr.Width) / float64(fw.w); maxfps < fps {
 		fps = maxfps
 	}
-	framec := make(chan []float64, int(4*fps))
+	framec := make(chan []complex64, int(2*fps))
+	fw.wg.Add(1)
 	go func() {
-		defer close(framec)
-		for row := range fw.fftc {
+		defer func() {
+			close(framec)
+			fw.wg.Done()
+		}()
+		for row := range fw.sampc {
 			select {
 			case framec <- row:
 			default:
 			}
 		}
 	}()
+
+	// FFT uses frame rate limited channel to avoid processing dropped rows.
+	fftc := nicerx.SpectrogramChan(framec, fw.w)
 
 	fpsDur := time.Duration(float64(time.Second) / fps)
 	ticker := time.NewTicker(fpsDur)
@@ -167,12 +175,8 @@ func (fw *fftWindow) Run() {
 		if fw.pause {
 			continue
 		}
-
 		// TODO: add more than one row per tick
-		if row := <-framec; row != nil {
-			// Cheat to hide dc bias bucket.
-			l := 2 * ((len(row) + 1) / 2)
-			row[l/2] = (row[l/2-1] + row[l/2+1]) / 2.0
+		if row := <-fftc; row != nil {
 			fw.ft.add(row)
 		} else {
 			log.Println("stream terminated")
@@ -217,7 +221,7 @@ func (fw *fftWindow) handleEvent(event sdl.Event) bool {
 	case *sdl.MouseMotionEvent:
 		cursorMHz := float64(fw.x2hz(ev.X)) / 1.0e6
 		mhz := fw.iqr.ToMHz()
-		if !fw.silentCenter {
+		if !fw.muteCenter {
 			log.Printf("center: %0.7gMHz of [%g,%g]", cursorMHz, mhz.BeginMHz(), mhz.EndMHz())
 		}
 	case *sdl.WindowEvent:
@@ -232,9 +236,10 @@ func (fw *fftWindow) handleEvent(event sdl.Event) bool {
 				fw.pause = !fw.pause
 			case sdl.K_l:
 				fw.launchWindow()
-			case sdl.K_s:
-				fw.silentCenter = !fw.silentCenter
+			case sdl.K_m:
+				fw.muteCenter = !fw.muteCenter
 			case sdl.K_r:
+				// Reset window size.
 				fw.win.SetSize(int32(fw.w), int32(fw.h))
 			}
 		} else if ev.Type == sdl.KEYUP {
@@ -243,11 +248,33 @@ func (fw *fftWindow) handleEvent(event sdl.Event) bool {
 				return false
 			case sdl.K_w:
 				fw.toggleWrite()
+			case sdl.K_s:
+				go fw.screenshot()
 			}
 		}
 
 	}
 	return true
+}
+
+func (fw *fftWindow) screenshot() error {
+	img := fw.ft.blitImage()
+	t := time.Now()
+	outfn := fmt.Sprintf("%02d%02d%02dT%02d%02d%02d-%d[%d].jpg",
+		t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(),
+		fw.iqr.Center, fw.iqr.Width)
+	outf, err := os.OpenFile(outfn, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	defer outf.Close()
+	if err := jpeg.Encode(outf, img, nil); err != nil {
+		log.Println(err)
+		return err
+	}
+	log.Println("saved screenshot", outfn)
+	return nil
 }
 
 func (fw *fftWindow) toggleWrite() {
