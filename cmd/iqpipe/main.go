@@ -13,8 +13,7 @@ import (
 )
 
 var (
-	centerHz    uint64
-	sampleHz    uint32
+	flagBand    radio.HzBand
 	deviationHz uint
 	downmixHz   int
 	cutoffHz    uint
@@ -29,6 +28,11 @@ var rootCmd = &cobra.Command{
 	Short: "A tool to pipe around IQ modulation.",
 }
 
+func addFlagBand(cmd *cobra.Command) {
+	cmd.Flags().Uint64VarP(&flagBand.Center, "center-hz", "c", 0, "Center frequency in Hz")
+	cmd.Flags().Uint64VarP(&flagBand.Width, "sample-rate", "s", 2048000, "Sample rate in Hz")
+}
+
 func init() {
 	downmixCmd := &cobra.Command{
 		Use:   "downmix [flags] input.iq8 output.iq8",
@@ -36,7 +40,7 @@ func init() {
 		Run:   func(cmd *cobra.Command, args []string) { applyXfmCmd(downmixXfm, args[0], args[1]) },
 	}
 	downmixCmd.Flags().IntVarP(&downmixHz, "frequency-downmix", "S", 0, "Frequency to down mix in Hz")
-	downmixCmd.Flags().Uint32VarP(&sampleHz, "sample-rate", "s", 2048000, "Sample rate in Hz")
+	addFlagBand(downmixCmd)
 	rootCmd.AddCommand(downmixCmd)
 
 	lowpassCmd := &cobra.Command{
@@ -45,7 +49,7 @@ func init() {
 		Run:   func(cmd *cobra.Command, args []string) { applyXfmCmd(lowpassXfm, args[0], args[1]) },
 	}
 	lowpassCmd.Flags().UintVarP(&cutoffHz, "cutoff", "c", 0, "Cutoff frequency in Hz")
-	lowpassCmd.Flags().Uint32VarP(&sampleHz, "sample-rate", "s", 2048000, "Sample rate in Hz")
+	addFlagBand(lowpassCmd)
 	rootCmd.AddCommand(lowpassCmd)
 
 	spectrogramCmd := &cobra.Command{
@@ -53,19 +57,19 @@ func init() {
 		Short: "Write spectrogram jpg",
 		Run:   func(cmd *cobra.Command, args []string) { spectrogram(args[0], args[1]) },
 	}
-	spectrogramCmd.Flags().Uint32VarP(&sampleHz, "sample-rate", "s", 2048000, "Sample rate in Hz")
 	spectrogramCmd.Flags().IntVarP(&imageWidth, "image-width", "w", 1024, "Width of FFT")
+	addFlagBand(spectrogramCmd)
 	rootCmd.AddCommand(spectrogramCmd)
 
-	demodCommand := &cobra.Command{
+	demodCmd := &cobra.Command{
 		Use:   "fmdemod iqfile pcmfile",
 		Short: "FM demodulate an iq8 file to PCM",
 		Run:   func(cmd *cobra.Command, args []string) { demod(args[0], args[1]) },
 	}
-	demodCommand.Flags().Uint32VarP(&sampleHz, "sample-rate", "s", 0, "Sample rate in Hz")
-	demodCommand.Flags().UintVarP(&deviationHz, "deviation", "d", 0, "Maximum signal deviation in Hz")
-	demodCommand.Flags().UintVarP(&pcmHz, "pcm-rate", "p", 0, "PCM sampling rate in Hz")
-	rootCmd.AddCommand(demodCommand)
+	demodCmd.Flags().UintVarP(&deviationHz, "deviation", "d", 0, "Maximum signal deviation in Hz")
+	demodCmd.Flags().UintVarP(&pcmHz, "pcm-rate", "p", 0, "PCM sampling rate in Hz")
+	addFlagBand(demodCmd)
+	rootCmd.AddCommand(demodCmd)
 }
 
 func openOutput(outf string) (io.Writer, func()) {
@@ -79,31 +83,27 @@ func openOutput(outf string) (io.Writer, func()) {
 	return fout, func() { fout.Close() }
 }
 
-func openInput(inf string) (io.Reader, func()) {
-	if inf == "-" {
-		return os.Stdin, func() {}
-	}
-	fin, err := os.Open(inf)
+func mustOpenInput(inf string) (*radio.MixerIQReader, func()) {
+	r, c, err := nicerx.OpenIQR(inf, flagBand)
 	if err != nil {
 		panic(err)
 	}
-	return fin, func() { fin.Close() }
+	return r, c
 }
 
 func demod(inf, outf string) {
-	if sampleHz == 0 || deviationHz == 0 || pcmHz == 0 {
+	if flagBand.Width == 0 || deviationHz == 0 || pcmHz == 0 {
 		panic("need sample-rate and deviation")
 	}
-	reader, rcloser := openInput(inf)
+	iqr, rcloser := mustOpenInput(inf)
 	defer rcloser()
 
 	writer, wcloser := openOutput(outf)
 	defer wcloser()
 
-	h := float64(deviationHz) / float64(sampleHz)
-	iqr := radio.NewIQReader(reader)
+	h := float64(deviationHz) / float64(iqr.Width)
 	demodc := dsp.DemodFM(float32(h), iqr.Batch64(512, 0))
-	r := float64(pcmHz) / float64(sampleHz)
+	r := float64(pcmHz) / float64(iqr.Width)
 	resampc := dsp.Resample(float32(r), demodc)
 	min, max := float32(1), float32(-1)
 	for rsamps := range resampc {
@@ -129,28 +129,28 @@ func spectrogram(inf, outf string) {
 	}
 }
 
-type xfmFunc func(iqr *radio.IQReader, iqw *radio.IQWriter)
+type xfmFunc func(iqr *radio.MixerIQReader, iqw *radio.IQWriter)
 
 func applyXfmCmd(xf xfmFunc, inf, outf string) {
-	reader, rcloser := openInput(inf)
+	iqr, rcloser := mustOpenInput(inf)
 	defer rcloser()
 
 	writer, wcloser := openOutput(outf)
 	defer wcloser()
 
-	xf(radio.NewIQReader(reader), radio.NewIQWriter(writer))
+	xf(iqr, radio.NewIQWriter(writer))
 }
 
-func downmixXfm(iqr *radio.IQReader, iqw *radio.IQWriter) {
-	inc := iqr.Batch64(int(sampleHz), 5)
-	for outSamps := range dsp.MixDown(float64(downmixHz), int(sampleHz), inc) {
+func downmixXfm(iqr *radio.MixerIQReader, iqw *radio.IQWriter) {
+	inc := iqr.Batch64(int(iqr.Width), 5)
+	for outSamps := range dsp.MixDown(float64(downmixHz), int(iqr.Width), inc) {
 		iqw.Write64(outSamps)
 	}
 }
 
-func lowpassXfm(iqr *radio.IQReader, iqw *radio.IQWriter) {
-	inc := iqr.Batch64(int(sampleHz), 5)
-	lpfc := dsp.Lowpass(float64(cutoffHz), int(sampleHz), 1, inc)
+func lowpassXfm(iqr *radio.MixerIQReader, iqw *radio.IQWriter) {
+	inc := iqr.Batch64(int(iqr.Width), 5)
+	lpfc := dsp.Lowpass(float64(cutoffHz), int(iqr.Width), 1, inc)
 	for outSamps := range lpfc {
 		iqw.Write64(outSamps)
 	}

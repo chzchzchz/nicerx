@@ -1,4 +1,4 @@
-package main
+package nicerx
 
 import (
 	"context"
@@ -13,6 +13,17 @@ import (
 	"github.com/chzchzchz/nicerx/sdrproxy/client"
 )
 
+func OpenIQR(path string, hzb radio.HzBand) (*radio.MixerIQReader, func(), error) {
+	if u, err := url.Parse(path); err == nil {
+		return openIQRURL(*u, hzb)
+	}
+	f, closer, err := openInput(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	return radio.NewMixerIQReader(f, hzb), closer, nil
+}
+
 func openInput(inf string) (io.Reader, func(), error) {
 	if inf == "-" {
 		return os.Stdin, func() {}, nil
@@ -24,28 +35,22 @@ func openInput(inf string) (io.Reader, func(), error) {
 	return fin, func() { fin.Close() }, nil
 }
 
-func openIQR(path string, hzb radio.HzBand) (*radio.MixerIQReader, func(), error) {
-	if u, err := url.Parse(path); err == nil {
-		return openIQRURL(*u, hzb)
-	}
-	f, closer, err := openInput(path)
-	if err != nil {
-		return nil, nil, err
-	}
-	return radio.NewMixerIQReader(f, hzb), closer, nil
-}
-
 func openIQRURL(u url.URL, b radio.HzBand) (*radio.MixerIQReader, func(), error) {
 	if u.Scheme != "sdr" {
 		return nil, nil, fmt.Errorf("expected sdr://host:port/device")
 	}
 	if u.Path == "" {
-		u.Path = u.Host
-		u.Host = ""
+		// sdr://device/
+		u.Path, u.Host = u.Host, ""
 	}
 	if u.Host == "" {
 		u.Host = "localhost:12000"
 	}
+	if u.User != nil {
+		// sdr://stream@host/
+		u.Path = u.User.Username()
+	}
+
 	sdrDevice := u.Path
 	if sdrDevice == "" {
 		return nil, nil, fmt.Errorf("no sdr device defined in url %s", u.String())
@@ -60,7 +65,7 @@ func openIQRURL(u url.URL, b radio.HzBand) (*radio.MixerIQReader, func(), error)
 	}
 
 	// Determine current radio tuning and use that.
-	if b.Center == 0 {
+	if b.Center == 0 && u.User == nil {
 		sigs, err := c.Signals(cctx)
 		if err != nil {
 			return nil, nil, err
@@ -70,7 +75,7 @@ func openIQRURL(u url.URL, b radio.HzBand) (*radio.MixerIQReader, func(), error)
 				log.Printf("got radio %+v", sig.Response.Radio)
 				req := sdrproxy.RxRequest{
 					HzBand: sig.Response.Radio.HzBand(),
-					Name:   "spectrogram-" + sdrDevice,
+					Name:   sdrDevice,
 					Radio:  sdrDevice,
 				}
 				iqr, err := c.OpenIQReader(cctx, req)
@@ -83,7 +88,7 @@ func openIQRURL(u url.URL, b radio.HzBand) (*radio.MixerIQReader, func(), error)
 		return nil, nil, fmt.Errorf("could not find sdr")
 	}
 
-	name := fmt.Sprintf("spectrogram-%s-%d", sdrDevice, b.Center)
+	name := fmt.Sprintf("%s-%d", sdrDevice, b.Center)
 	req := sdrproxy.RxRequest{
 		HzBand: b,
 		Name:   name,

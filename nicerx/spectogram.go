@@ -38,10 +38,10 @@ func FFTBin2Color(v float64) color.NRGBA {
 }
 
 type spectrogram struct {
-	plan *fftw32.Plan
+	plan    *fftw32.Plan
 	in, out *fftw32.Array
-	inc <-chan []complex64
-	outc chan<- []float64
+	inc     <-chan []complex64
+	outc    chan<- []float64
 }
 
 func (sp *spectrogram) run() {
@@ -53,7 +53,7 @@ func (sp *spectrogram) run() {
 		fft := make([]float64, len(samps))
 		min, max := 0.0, 0.0
 		for i, v := range sp.out.Elems[1:] {
-			j := i+1
+			j := i + 1
 			fft[j] = cmplx.Abs(complex128(v))
 			if fft[j] < min {
 				min = fft[j]
@@ -87,9 +87,9 @@ func SpectrogramChan(inc <-chan []complex64, bins int) <-chan []float64 {
 		defer plan.Destroy()
 		sp := spectrogram{
 			plan: plan,
-			in: in,
-			out: out,
-			inc: inc,
+			in:   in,
+			out:  out,
+			inc:  inc,
 			outc: outc,
 		}
 		sp.run()

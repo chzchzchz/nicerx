@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/veandco/go-sdl2/sdl"
 
+	"github.com/chzchzchz/nicerx/nicerx"
 	"github.com/chzchzchz/nicerx/radio"
 )
 
@@ -43,7 +44,7 @@ func fftCmd(args []string) {
 	if len(args) == 0 {
 		panic("expected arguments for fft file / device")
 	}
-	iqr, closer, err := openIQR(args[0], flagBand)
+	iqr, closer, err := nicerx.OpenIQR(args[0], flagBand)
 	if err != nil {
 		panic(err)
 	}
