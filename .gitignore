@@ -3,6 +3,7 @@
 *.db
 *.out
 *.iq8
+*.wav
 cmd/iqpipe/iqpipe
 cmd/iqscope/iqscope
 cmd/sdrproxy/sdrproxy

@@ -14,6 +14,7 @@ var (
 	winHeight int
 	resizable bool
 	popup     bool
+	outputExt string
 )
 
 var rootCmd = &cobra.Command{
@@ -30,6 +31,7 @@ func init() {
 
 	fftCmd.Flags().Uint64VarP(&flagBand.Center, "center-hz", "c", 0, "Center Frequency in Hz")
 	fftCmd.Flags().Uint64VarP(&flagBand.Width, "sample-rate", "s", 2048000, "Sample rate in Hz")
+	fftCmd.Flags().StringVarP(&outputExt, "output-format", "f", "wav", "Output wav or iq8")
 
 	// UI
 	fftCmd.Flags().IntVarP(&winWidth, "window-width", "w", 600, "Total FFT buckets / window width")

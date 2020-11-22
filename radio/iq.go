@@ -138,6 +138,7 @@ func NewIQWriter(w io.Writer) *IQWriter { return &IQWriter{w} }
 func (iq *IQWriter) Write64(out []complex64) error {
 	buf := make([]byte, 2*len(out))
 	for i := range out {
+		// Convert to u8.
 		buf[2*i] = byte((real(out[i]) * 128.0) + 127.0)
 		buf[2*i+1] = byte((imag(out[i]) * 128.0) + 127.0)
 	}

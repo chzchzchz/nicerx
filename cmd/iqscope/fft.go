@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/veandco/go-sdl2/sdl"
@@ -247,7 +248,9 @@ func (fw *fftWindow) handleEvent(event sdl.Event) bool {
 			case sdl.K_ESCAPE:
 				return false
 			case sdl.K_w:
-				fw.toggleWrite()
+				fw.toggleWrite(false)
+			case sdl.K_f:
+				fw.toggleWrite(true)
 			case sdl.K_s:
 				go fw.screenshot()
 			}
@@ -277,14 +280,28 @@ func (fw *fftWindow) screenshot() error {
 	return nil
 }
 
-func (fw *fftWindow) toggleWrite() {
-	path := fmt.Sprintf("%d[%d].iq8", fw.iqr.Center, fw.iqr.Width)
+func (fw *fftWindow) toggleWrite(useFifo bool) {
+	path := fmt.Sprintf("%d[%d].%s", fw.iqr.Center, fw.iqr.Width, outputExt)
 	if fw.wdonec != nil {
-		log.Println("stop writing", path)
 		fw.wcancel()
 		<-fw.wdonec
 		fw.wdonec = nil
 		return
+	}
+
+	if useFifo {
+		if err := syscall.Mkfifo(path, 0644); err != nil {
+			if !os.IsExist(err) {
+				panic(err)
+			}
+			fi, err := os.Stat(path)
+			if err != nil {
+				panic(err)
+			}
+			if fi.Mode()&os.ModeNamedPipe != os.ModeNamedPipe {
+				panic("expected named pipe on " + path)
+			}
+		}
 	}
 
 	wdonec := make(chan struct{})
@@ -292,16 +309,30 @@ func (fw *fftWindow) toggleWrite() {
 	fw.wdonec, fw.wcancel = wdonec, cancel
 	fw.wg.Add(1)
 	go func() {
-		defer fw.wg.Done()
-		defer close(wdonec)
-		log.Println("start writing", path)
-		f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
+		defer func() {
+			fw.wcancel()
+			close(wdonec)
+			log.Println("finished recording", path)
+			fw.wg.Done()
+		}()
+		log.Println("start recording", path)
+		iqw, closer, err := nicerx.OpenIQW(path, fw.iqr.HzBand)
 		if err != nil {
 			log.Println("failed to open", path, err)
 			return
 		}
-		defer f.Close()
-		iqw := radio.NewIQWriter(f)
+
+		defer closer()
+		fw.wg.Add(1)
+		go func() {
+			// FIFO case needs file closed to terminate Write64.
+			defer fw.wg.Done()
+			<-ctx.Done()
+			closer()
+		}()
+
+		// TODO: this needs a way to stop the write if sampc closes.
+
 		sampc := fw.iqr.BatchStream64(ctx, fw.w, 0)
 		for samps := range sampc {
 			if err := iqw.Write64(samps); err != nil {

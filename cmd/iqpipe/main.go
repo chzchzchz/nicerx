@@ -2,8 +2,6 @@ package main
 
 import (
 	"encoding/binary"
-	"io"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -48,7 +46,7 @@ func init() {
 		Short: "Lowpass filter",
 		Run:   func(cmd *cobra.Command, args []string) { applyXfmCmd(lowpassXfm, args[0], args[1]) },
 	}
-	lowpassCmd.Flags().UintVarP(&cutoffHz, "cutoff", "c", 0, "Cutoff frequency in Hz")
+	lowpassCmd.Flags().UintVarP(&cutoffHz, "cutoff", "C", 0, "Cutoff frequency in Hz")
 	addFlagBand(lowpassCmd)
 	rootCmd.AddCommand(lowpassCmd)
 
@@ -72,15 +70,12 @@ func init() {
 	rootCmd.AddCommand(demodCmd)
 }
 
-func openOutput(outf string) (io.Writer, func()) {
-	if outf == "-" {
-		return os.Stdout, func() {}
-	}
-	fout, err := os.OpenFile(outf, os.O_RDWR|os.O_CREATE, 0644)
+func mustOpenIQW(outf string) (*radio.IQWriter, func()) {
+	w, c, err := nicerx.OpenIQW(outf, flagBand)
 	if err != nil {
 		panic(err)
 	}
-	return fout, func() { fout.Close() }
+	return w, c
 }
 
 func mustOpenInput(inf string) (*radio.MixerIQReader, func()) {
@@ -98,24 +93,29 @@ func demod(inf, outf string) {
 	iqr, rcloser := mustOpenInput(inf)
 	defer rcloser()
 
-	writer, wcloser := openOutput(outf)
+	outBand := radio.HzBand{Center: iqr.Center, Width: uint64(pcmHz)}
+	writer, wcloser, err := nicerx.OpenOutputS16(outf, outBand)
+	if err != nil {
+		panic(err)
+	}
 	defer wcloser()
 
 	h := float64(deviationHz) / float64(iqr.Width)
 	demodc := dsp.DemodFM(float32(h), iqr.Batch64(512, 0))
 	r := float64(pcmHz) / float64(iqr.Width)
 	resampc := dsp.Resample(float32(r), demodc)
-	min, max := float32(1), float32(-1)
+	min, max := float32(0), float32(0)
 	for rsamps := range resampc {
 		outsamps := make([]int16, len(rsamps))
 		for i, v := range rsamps {
-			if min > v {
+			if min > v && v == v {
 				min = v
 			}
-			if max < v {
+			if max < v && v == v {
 				max = v
 			}
-			outsamps[i] = int16((v / (max - min) * 0x7fff))
+			vv := 2.0 * (((v - min) / (max - min)) - 0.5)
+			outsamps[i] = int16(vv * 0x7fff)
 		}
 		if err := binary.Write(writer, binary.LittleEndian, outsamps); err != nil {
 			panic(err)
@@ -135,10 +135,9 @@ func applyXfmCmd(xf xfmFunc, inf, outf string) {
 	iqr, rcloser := mustOpenInput(inf)
 	defer rcloser()
 
-	writer, wcloser := openOutput(outf)
+	writer, wcloser := mustOpenIQW(outf)
 	defer wcloser()
-
-	xf(iqr, radio.NewIQWriter(writer))
+	xf(iqr, writer)
 }
 
 func downmixXfm(iqr *radio.MixerIQReader, iqw *radio.IQWriter) {
